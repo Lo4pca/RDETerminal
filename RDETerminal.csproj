@@ -1,0 +1,122 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net47</TargetFramework>
+    <AssemblyName>RDETerminal</AssemblyName>
+    <Product>RDETerminal</Product>
+    <Version>0.0.1</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+
+    <RestoreAdditionalProjectSources>
+      https://api.nuget.org/v3/index.json;
+      https://nuget.bepinex.dev/v3/index.json;
+      https://nuget.samboy.dev/v3/index.json
+    </RestoreAdditionalProjectSources>
+
+    <RootNamespace>RDETerminal</RootNamespace>
+    <BepInExPluginGuid>com.modding.rdeterminal</BepInExPluginGuid>
+    <!-- export RDETERMINAL_PLUGIN_OUTPUT="" -->
+    <PluginOutputDir>$(RDETERMINAL_PLUGIN_OUTPUT)</PluginOutputDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core" Version="5.*" />
+    <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+    <!-- 因游戏目录下的dll版本较低，无法使用过高的版本 -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.5.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="4.5.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.5.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Features" Version="4.5.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="4.5.0" />
+    <PackageReference Include="SQLitePCLRaw.core" Version="2.1.11" />
+    <PackageReference Include="UnityEngine.Modules" Version="2022.3.62" IncludeAssets="compile" />
+    <Reference Include="lib/*" IncludeAssets="compile" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+  </ItemGroup>
+
+  <Target Name="ValidatePluginOutputDir" BeforeTargets="Build">
+    <Error Condition="'$(PluginOutputDir)' == ''"
+           Text="Environment variable RDETERMINAL_PLUGIN_OUTPUT is not set. Please set it before building." />
+  </Target>
+
+  <!-- 拷贝运行时需要的dll，省去部分已存在于游戏目录下的dll -->
+  <Target Name="CopyPluginToOutput" AfterTargets="Build">
+    <ItemGroup>
+      <RoslynRuntimeCopy Include="@(ReferenceCopyLocalPaths)"
+                         Condition="
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Humanizer'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.AnalyzerUtilities'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.CSharp'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.CSharp.Features'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.CSharp.Features.resources'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.CSharp.Scripting'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.CSharp.Scripting.resources'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.CSharp.Workspaces'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.CSharp.Workspaces.resources'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.CSharp.resources'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.Elfie'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.Features'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.Features.resources'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.Scripting'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.Scripting.resources'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.Workspaces'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.Workspaces.resources'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.CodeAnalysis.resources'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.DiaSymReader'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'Microsoft.Win32.Primitives'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'System.Composition.AttributedModel'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'System.Composition.Convention'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'System.Composition.Hosting'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'System.Composition.Runtime'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'System.Composition.TypedParts'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'System.Reflection.Metadata'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'System.Text.Encoding.CodePages'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'SQLitePCLRaw.core'
+        Or
+        '%(ReferenceCopyLocalPaths.Filename)' == 'System.Threading.Channels'
+        " />
+
+      <FilesToCopy Include="$(TargetPath)" />
+      <FilesToCopy Include="@(RoslynRuntimeCopy)" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(FilesToCopy)"
+          DestinationFolder="$(PluginOutputDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

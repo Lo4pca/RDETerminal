@@ -1,0 +1,8 @@
+.DS_Store
+exclude.txt
+keep.txt
+test*
+RDETerminal.sln
+bin
+lib
+obj
