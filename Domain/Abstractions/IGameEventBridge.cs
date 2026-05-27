@@ -1,5 +1,4 @@
 using System;
-using RDETerminal.Adapters;
 using RDETerminal.Domain.Core;
 
 namespace RDETerminal.Domain.Abstractions;

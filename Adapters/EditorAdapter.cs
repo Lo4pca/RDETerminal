@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
 using RDETerminal.Domain;
+using RDETerminal.Domain.Abstractions;
 using RDETerminal.Domain.Core;
 using RDLevelEditor;
 
 namespace RDETerminal.Adapters;
 
-public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
+public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISelectedEventsSource
 {
     private readonly ReflectionGameEventBridge _eventBridge = eventBridge ?? throw new ArgumentNullException(nameof(eventBridge));
 
@@ -18,11 +19,6 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
     private static scnEditor Editor =>
         scnEditor.instance ?? throw new InvalidOperationException(
             "scnEditor.instance is null. The editor scene is not active.");
-
-    public EditorAdapter()
-        : this(BridgeServices.Shared.EventBridge)
-    {
-    }
 
     public EventSet GetSelectedEvents()
     {

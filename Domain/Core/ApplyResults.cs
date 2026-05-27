@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 
-namespace RDETerminal.Adapters
+namespace RDETerminal.Domain.Core
 {
     public sealed class EventApplyResult
     {

@@ -1,4 +1,3 @@
-using RDETerminal.Adapters;
 using RDETerminal.Domain.Abstractions;
 using RDETerminal.Domain.Core;
 using RDETerminal.Notebook;

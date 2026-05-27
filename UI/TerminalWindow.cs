@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text;
 using Microsoft.CodeAnalysis.Completion;
 using Microsoft.CodeAnalysis.Tags;
-using RDETerminal.Adapters;
 using RDETerminal.Notebook;
 using RDLevelEditor;
 using UnityEngine;
@@ -71,8 +70,6 @@ public sealed class TerminalWindow : MonoBehaviour
         public Text Label;
     }
     private NotebookKernel _kernel;
-    private EditorAdapter _editorAdapter;
-    private GameLevelBridge _levelBridge;
 
     private GameObject _root;
     private Canvas _canvas;
@@ -118,11 +115,22 @@ public sealed class TerminalWindow : MonoBehaviour
 
     private void Awake()
     {
+        // Intentionally empty. TerminalBootstrap calls Initialize() immediately
+        // after AddComponent, passing in fully-constructed dependencies.
+        // If Initialize() was never called (e.g. during testing or a future code
+        // path change), Update() and the scene events are harmless no-ops
+        // because _kernel remains null.
+    }
+
+    /// <summary>
+    /// Called by <see cref="TerminalBootstrap"/> immediately after AddComponent.
+    /// Wires dependencies and bootstraps the UI for the current scene.
+    /// </summary>
+    internal void Initialize(NotebookKernel kernel)
+    {
         try
         {
-            _editorAdapter = new EditorAdapter();
-            _levelBridge = new GameLevelBridge(_editorAdapter);
-            _kernel = new NotebookKernel(_editorAdapter, _levelBridge);
+            _kernel = kernel ?? throw new ArgumentNullException(nameof(kernel));
 
             SceneManager.sceneLoaded += OnSceneLoaded;
             SceneManager.sceneUnloaded += OnSceneUnloaded;
@@ -136,11 +144,11 @@ public sealed class TerminalWindow : MonoBehaviour
                 SetVisible(false);
             }
 
-            Plugin.LogInfo("NotebookKernel created successfully.");
+            Plugin.LogInfo("NotebookKernel initialized successfully.");
         }
         catch (Exception ex)
         {
-            Plugin.LogError("NotebookKernel init failed:");
+            Plugin.LogError("TerminalWindow initialization failed:");
             Plugin.LogError(ex.ToString());
             enabled = false;
         }
