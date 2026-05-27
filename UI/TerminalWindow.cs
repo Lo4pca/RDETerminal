@@ -109,6 +109,13 @@ public sealed class TerminalWindow : MonoBehaviour
 
     private const float CompletionDetailPanelWidth = 170f;
     private const float SignaturePanelHeight = 52f;
+
+    /// <summary>
+    /// Tracks whether the editor scene is currently active.
+    /// Set by scene load/unload events — never polled in Update.
+    /// </summary>
+    private bool _editorSceneActive;
+
     private void Awake()
     {
         try
@@ -117,8 +124,17 @@ public sealed class TerminalWindow : MonoBehaviour
             _levelBridge = new GameLevelBridge(_editorAdapter);
             _kernel = new NotebookKernel(_editorAdapter, _levelBridge);
 
-            BuildNativeUi();
-            SetVisible(false);
+            SceneManager.sceneLoaded += OnSceneLoaded;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
+
+            // The Harmony patch fires after scnEditor.Start(), so the scene is
+            // already active. Bootstrap the UI immediately.
+            if (SceneManager.GetActiveScene().name == "scnEditor")
+            {
+                _editorSceneActive = true;
+                BuildNativeUi();
+                SetVisible(false);
+            }
 
             Plugin.LogInfo("NotebookKernel created successfully.");
         }
@@ -132,21 +148,57 @@ public sealed class TerminalWindow : MonoBehaviour
 
     private void OnDestroy()
     {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+        SceneManager.sceneUnloaded -= OnSceneUnloaded;
         DestroyNativeUi();
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name != "scnEditor")
+        {
+            return;
+        }
+
+        _editorSceneActive = true;
+        BuildNativeUi();
+        SetVisible(false);
+    }
+
+    private void OnSceneUnloaded(Scene scene)
+    {
+        if (scene.name != "scnEditor")
+        {
+            return;
+        }
+
+        _editorSceneActive = false;
+        HideCompletion();
+
+        // The scene canvas and all UI children are being destroyed by Unity.
+        // Null out our references so DestroyNativeUi won't try to Destroy()
+        // already-dead objects when the scene unloads.
+        _root = null;
+        _canvas = null;
+        _ownsCanvas = false;
+        _scrollRect = null;
+        _transcriptContent = null;
+        _transcriptText = null;
+        _transcriptLayoutElement = null;
+        _completionPanel = null;
+        _completionRows.Clear();
+        _completionDetailPanel = null;
+        _completionDetailText = null;
+        _signaturePanel = null;
+        _signatureText = null;
+        _inputField = null;
     }
 
     private void Update()
     {
-        if (SceneManager.GetActiveScene().name != "scnEditor")
+        if (!_editorSceneActive)
         {
-            _root?.SetActive(false);
             return;
-        }
-
-        if (_root == null)
-        {
-            BuildNativeUi();
-            SetVisible(_visible);
         }
 
         if (Input.GetKeyDown(KeyCode.F1))
@@ -725,8 +777,8 @@ public sealed class TerminalWindow : MonoBehaviour
         _completionIndex = 0;
         _completionVisible = _completionItems.Count > 0;
         RefreshCompletionPanel();
-        RefreshCompletionDetailPanel();
-        RefreshSignaturePanel();
+        await RefreshCompletionDetailPanelAsync();
+        await RefreshSignaturePanelAsync();
         LogCompletionItems();
     }
 
@@ -796,11 +848,11 @@ public sealed class TerminalWindow : MonoBehaviour
 
         _completionIndex = (_completionIndex + delta + _completionItems.Count) % _completionItems.Count;
         RefreshCompletionPanel();
-        RefreshCompletionDetailPanel();
+        _ = RefreshCompletionDetailPanelAsync();
         LogCompletionItems();
     }
 
-    private void CommitCompletion()
+    private async void CommitCompletion()
     {
         if (!_completionVisible || _completionItems.Count == 0 || _kernel == null || _inputField == null)
         {
@@ -809,12 +861,10 @@ public sealed class TerminalWindow : MonoBehaviour
 
         CompletionItem selected = _completionItems[_completionIndex];
         string code = _inputField.text ?? string.Empty;
-        string newText = _kernel.Completion
-            .ApplyAsync(code, selected)
-            .GetAwaiter()
-            .GetResult();
 
         HideCompletion();
+
+        string newText = await _kernel.Completion.ApplyAsync(code, selected);
         SetInputTextSilently(newText);
     }
 
@@ -848,8 +898,9 @@ public sealed class TerminalWindow : MonoBehaviour
         _inputField.selectionFocusPosition = caret;
 
         _suppressInputChanged = false;
-        RefreshSignaturePanel();
+        _ = RefreshSignaturePanelAsync();
     }
+
     private void RefreshCompletionPanel()
     {
         if (_completionPanel == null)
@@ -900,7 +951,7 @@ public sealed class TerminalWindow : MonoBehaviour
             row.Label.text = BuildCompletionLabel(item, _currentCompletionPrefix);
         }
     }
-    private void RefreshCompletionDetailPanel()
+    private async Task RefreshCompletionDetailPanelAsync()
     {
         if (_completionDetailPanel == null || _completionDetailText == null)
         {
@@ -915,10 +966,14 @@ public sealed class TerminalWindow : MonoBehaviour
 
         CompletionItem selected = _completionItems[_completionIndex];
         string kind = GetCompletionKindLabel(selected);
-        string description = _kernel.Completion
-            .GetCompletionDescriptionAsync(_inputField.text ?? string.Empty, selected)
-            .GetAwaiter()
-            .GetResult();
+        string description = await _kernel.Completion
+            .GetCompletionDescriptionAsync(_inputField.text ?? string.Empty, selected);
+
+        // Guard: user may have changed selection while we awaited
+        if (!_completionVisible || _completionItems.Count == 0)
+        {
+            return;
+        }
 
         _completionDetailText.text =
             "<b>" + EscapeRichText(selected.DisplayText) + "</b>\n" +
@@ -928,16 +983,23 @@ public sealed class TerminalWindow : MonoBehaviour
         _completionDetailPanel.SetActive(true);
     }
 
-    private void RefreshSignaturePanel()
+    private async Task RefreshSignaturePanelAsync()
     {
         if (_signaturePanel == null || _signatureText == null || _kernel == null || _inputField == null)
         {
             return;
         }
-        string signature = _kernel.Completion
-            .GetSignatureTextAsync(_inputField.text ?? string.Empty, _inputField.caretPosition)
-            .GetAwaiter()
-            .GetResult();
+
+        string code = _inputField.text ?? string.Empty;
+        int caret = _inputField.caretPosition;
+
+        string signature = await _kernel.Completion.GetSignatureTextAsync(code, caret);
+
+        // Guard: input may have changed while we awaited
+        if (_signaturePanel == null || _signatureText == null)
+        {
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(signature))
         {
@@ -1238,7 +1300,7 @@ public sealed class TerminalWindow : MonoBehaviour
         _inputField.Select();
     }
 
-    private void ExecuteCurrentCell()
+    private async void ExecuteCurrentCell()
     {
         if (_kernel == null || _inputField == null)
         {
@@ -1256,7 +1318,7 @@ public sealed class TerminalWindow : MonoBehaviour
         SetInputTextSilently(string.Empty);
         _history.ResetCursor();
 
-        NotebookCellResult result = _kernel.ExecuteAsync(code).GetAwaiter().GetResult();
+        NotebookCellResult result = await _kernel.ExecuteAsync(code);
         if (!result.Success)
         {
             Plugin.LogError(result.Error);

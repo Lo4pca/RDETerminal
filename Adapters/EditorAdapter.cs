@@ -9,7 +9,16 @@ namespace RDETerminal.Adapters;
 public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
 {
     private readonly ReflectionGameEventBridge _eventBridge = eventBridge ?? throw new ArgumentNullException(nameof(eventBridge));
-    readonly scnEditor editor = scnEditor.instance;
+
+    /// <summary>
+    /// Resolves the current <see cref="scnEditor"/> instance on every access.
+    /// Throws <see cref="InvalidOperationException"/> when the editor scene is not loaded.
+    /// Never cache this value — the instance changes across scene reloads.
+    /// </summary>
+    private static scnEditor Editor =>
+        scnEditor.instance ?? throw new InvalidOperationException(
+            "scnEditor.instance is null. The editor scene is not active.");
+
     public EditorAdapter()
         : this(BridgeServices.Shared.EventBridge)
     {
@@ -19,7 +28,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
     {
         List<LevelEventSnapshot> items = [];
 
-        foreach (LevelEventControl_Base control in editor.selectedControls)
+        foreach (LevelEventControl_Base control in Editor.selectedControls)
         {
             if (control == null || control.levelEvent == null)
             {
@@ -54,12 +63,12 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
         configure?.Invoke(levelEvent);
         levelEvent.OnCreate();
 
-        LevelEventControl_Base control = editor.CreateEventControl(levelEvent, tab, skipSaveState) ?? throw new InvalidOperationException("CreateEventControl returns null.");
+        LevelEventControl_Base control = Editor.CreateEventControl(levelEvent, tab, skipSaveState) ?? throw new InvalidOperationException("CreateEventControl returns null.");
         control.UpdateUI();
 
         if (selectCreatedControl)
         {
-            editor.SelectEventControl(control, false);
+            Editor.SelectEventControl(control, false);
         }
 
         return control;
@@ -67,7 +76,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
 
     public void DeleteEventControl(LevelEventControl_Base eventControl, bool selectControlToTheLeft, bool sound = false)
     {
-        editor.DeleteEventControl(eventControl, selectControlToTheLeft, sound);
+        Editor.DeleteEventControl(eventControl, selectControlToTheLeft, sound);
     }
 
     public LevelEventControl_Base CreateEventFromSnapshot(
@@ -97,12 +106,12 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
             levelEvent.OnCreate();
         }
 
-        LevelEventControl_Base control = editor.CreateEventControl(levelEvent, tab, skipSaveState) ?? throw new InvalidOperationException("CreateEventControl returns null.");
+        LevelEventControl_Base control = Editor.CreateEventControl(levelEvent, tab, skipSaveState) ?? throw new InvalidOperationException("CreateEventControl returns null.");
         control.UpdateUI();
 
         if (selectCreatedControl)
         {
-            editor.SelectEventControl(control, false);
+            Editor.SelectEventControl(control, false);
         }
 
         return control;
@@ -117,7 +126,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
         bool selectLastCreatedControl = true,
         bool skipSaveState = false)
     {
-        LevelEventControl_Base anchor = GetFirstSelectedControl(editor);
+        LevelEventControl_Base anchor = GetFirstSelectedControl(Editor);
         if (anchor != null && anchor.levelEvent != null)
         {
             return CreateEventsFromControl(
@@ -137,7 +146,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
             number,
             numTracks,
             startY,
-            editor.currentTab,
+            Editor.currentTab,
             selectLastCreatedControl,
             skipSaveState);
     }
@@ -160,7 +169,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
             number,
             numTracks,
             startY,
-            editor.currentTab,
+            Editor.currentTab,
             selectLastCreatedControl,
             skipSaveState);
     }
@@ -231,7 +240,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
         {
             LevelEvent_Base levelEvent = CreateLevelEventInstance(eventType);
 
-            BarAndBeat currentBarAndBeat = OffsetBarAndBeat(editor, startBarAndBeat, spacing * i, fixBarAndBeat);
+            BarAndBeat currentBarAndBeat = OffsetBarAndBeat(Editor, startBarAndBeat, spacing * i, fixBarAndBeat);
 
             LevelEventControl_Base control = CreateEvent(
                 levelEvent,
@@ -249,7 +258,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
 
         if (selectLastCreatedControl && created.Count > 0)
         {
-            editor.SelectEventControl(created[created.Count - 1], false);
+            Editor.SelectEventControl(created[created.Count - 1], false);
         }
 
         return created;
@@ -280,7 +289,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge)
             number,
             numTracks,
             anchorControl.levelEvent.y,
-            editor.currentTab,
+            Editor.currentTab,
             selectLastCreatedControl,
             skipSaveState);
     }
