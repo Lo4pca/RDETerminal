@@ -7,7 +7,7 @@ namespace RDETerminal;
 [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
 public class Plugin : BaseUnityPlugin
 {
-    public static new ManualLogSource Logger;
+    private static new ManualLogSource Logger;
     public static void LogWarn(object message)
     {
         Logger.LogWarning(message);

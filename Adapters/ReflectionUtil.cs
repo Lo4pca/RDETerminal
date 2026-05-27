@@ -1,8 +1,12 @@
 using System;
 using System.Reflection;
 
-namespace RDETerminal.Domain;
+namespace RDETerminal.Adapters;
 
+/// <summary>
+/// Low-level reflection helpers used by adapter infrastructure.
+/// Not a domain concept — lives in Adapters alongside its callers.
+/// </summary>
 public static class ReflectionUtil
 {
     private const BindingFlags InstanceFlags =

@@ -28,7 +28,7 @@ public sealed class RoslynCompletionSession
             "RDLevelEditor",
             "RDETerminal.Domain",
             "RDETerminal.Domain.Core",
-            "RDETerminal.Domain.Queries.Common",
+            "RDETerminal.Domain.Queries",
             "RDETerminal.Domain.Transforms.Common",
             "RDETerminal.Domain.Transforms.Text",
             "RDETerminal.Scripting"
@@ -124,7 +124,7 @@ public sealed class RoslynCompletionSession
         return sortedItems;
     }
 
-    private static string GetCurrentPrefix(string code, int cursorPosition)
+    internal static string GetCurrentPrefix(string code, int cursorPosition)
     {
         if (string.IsNullOrEmpty(code))
         {

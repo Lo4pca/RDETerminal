@@ -772,7 +772,7 @@ public sealed class TerminalWindow : MonoBehaviour
         }
 
         int caret = Mathf.Clamp(_inputField.caretPosition, 0, text.Length);
-        _currentCompletionPrefix = GetCompletionPrefix(text, caret);
+        _currentCompletionPrefix = RoslynCompletionSession.GetCurrentPrefix(text, caret);
 
         IReadOnlyList<CompletionItem> items = await _kernel.Completion.GetItemsAsync(text, caret);
 
@@ -788,30 +788,6 @@ public sealed class TerminalWindow : MonoBehaviour
         await RefreshCompletionDetailPanelAsync();
         await RefreshSignaturePanelAsync();
         LogCompletionItems();
-    }
-
-    private static string GetCompletionPrefix(string code, int caret)
-    {
-        if (string.IsNullOrEmpty(code))
-        {
-            return string.Empty;
-        }
-
-        caret = Mathf.Clamp(caret, 0, code.Length);
-
-        int start = caret;
-        while (start > 0)
-        {
-            char c = code[start - 1];
-            if (!(char.IsLetterOrDigit(c) || c == '_' || c == '.'))
-            {
-                break;
-            }
-
-            start--;
-        }
-
-        return code.Substring(start, caret - start);
     }
 
     private void LogCompletionItems()

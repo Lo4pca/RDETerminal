@@ -26,7 +26,7 @@ public static class ScriptImports
                 "RDLevelEditor",
                 "RDETerminal.Domain",
                 "RDETerminal.Domain.Core",
-                "RDETerminal.Domain.Queries.Common",
+                "RDETerminal.Domain.Queries",
                 "RDETerminal.Domain.Transforms.Common",
                 "RDETerminal.Domain.Transforms.Text",
                 "RDETerminal.Scripting");

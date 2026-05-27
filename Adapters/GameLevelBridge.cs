@@ -5,7 +5,6 @@ using System.Linq;
 using RDLevelEditor;
 using RDETerminal.Domain.Abstractions;
 using RDETerminal.Domain.Core;
-using RDETerminal.Domain;
 
 namespace RDETerminal.Adapters;
 
