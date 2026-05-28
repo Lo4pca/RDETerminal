@@ -4,8 +4,28 @@ using System.Collections.Generic;
 
 namespace RDETerminal.Domain.Core;
 
+/// <summary>
+/// Produces deep copies of values stored in a <see cref="LevelEventSnapshot"/>.
+/// </summary>
+/// <remarks>
+/// <para><b>Array contract:</b> Arrays are intentionally cloned as
+/// <see cref="List{T}">List&lt;object&gt;</see>, not as typed arrays.
+/// This avoids the complexity of preserving generic array types across the
+/// untyped snapshot dictionary.</para>
+/// <para>When these values are written back to a game object via
+/// <c>ReflectionGameEventBridge.Apply</c>, the <c>TryConvertToArray</c>
+/// method reconstructs the correct typed array from the list.
+/// The two methods form a matched pair — changes to either side must
+/// preserve this round-trip.</para>
+/// </remarks>
 public static class SnapshotValueCloner
 {
+    /// <summary>
+    /// Deep-clones <paramref name="value"/> for safe storage in a snapshot.
+    /// Value types and strings are returned as-is (they are already immutable).
+    /// Arrays are stored as <see cref="List{T}">List&lt;object&gt;</see> —
+    /// see class remarks for the round-trip contract.
+    /// </summary>
     public static object Clone(object value)
     {
         if (value == null)

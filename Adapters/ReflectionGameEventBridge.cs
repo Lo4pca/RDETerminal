@@ -326,6 +326,16 @@ public class ReflectionGameEventBridge : IGameEventBridge
         return true;
     }
 
+    /// <summary>
+    /// Converts <paramref name="rawValue"/> to a typed array of <paramref name="elementType"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Array contract:</b> <see cref="SnapshotValueCloner.Clone"/> stores arrays as
+    /// <c>List&lt;object&gt;</c> to avoid generic type complexity in the snapshot dictionary.
+    /// The <c>IEnumerable</c> branch of this method is the matching receiver — it
+    /// reconstructs the correctly-typed array from that list.
+    /// The two methods form a matched pair; changes to either must preserve the round-trip.
+    /// </remarks>
     private static bool TryConvertToArray(object rawValue, Type elementType, out object converted)
     {
         converted = null;
