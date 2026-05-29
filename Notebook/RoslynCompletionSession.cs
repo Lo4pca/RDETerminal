@@ -20,6 +20,14 @@ public sealed class RoslynCompletionSession
     private readonly AdhocWorkspace _workspace;
     private readonly ProjectId _projectId;
     private readonly DocumentId _documentId;
+
+    /// <summary>
+    /// Serialises all workspace mutations. AdhocWorkspace is not thread-safe,
+    /// and multiple async completion operations can be in-flight concurrently.
+    /// SemaphoreSlim(1,1) gives async-compatible mutual exclusion without
+    /// blocking any thread while waiting.
+    /// </summary>
+    private readonly SemaphoreSlim _workspaceLock = new(1, 1);
     private static readonly IEnumerable<string> DefaultImports = 
         [
             "System",
@@ -81,47 +89,56 @@ public sealed class RoslynCompletionSession
             return [];
         }
 
-        _workspace.TryApplyChanges(_workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
-
-        Document document = _workspace.CurrentSolution.GetDocument(_documentId);
-        if (document == null)
+        await _workspaceLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return [];
-        }
+            _workspace.TryApplyChanges(_workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
 
-        CompletionService service = CompletionService.GetService(document);
-        if (service == null)
+            Document document = _workspace.CurrentSolution.GetDocument(_documentId);
+            if (document == null)
+            {
+                return [];
+            }
+
+            CompletionService service = CompletionService.GetService(document);
+            if (service == null)
+            {
+                return [];
+            }
+
+            var results = await service.GetCompletionsAsync(
+                document,
+                cursorPosition,
+                trigger: CreateTrigger(code, cursorPosition),
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            if (results == null || results.ItemsList.Count == 0)
+            {
+                return [];
+            }
+
+            SourceText text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+            var cache = new Dictionary<TextSpan, string>();
+            string prefix = GetCurrentPrefix(code, cursorPosition);
+
+            var sortedItems = results.ItemsList
+                .Where(item => MatchesFilterText(service, document, item, text, cache))
+                .Select(item => new {
+                    Item = item,
+                    PrefixScore = item.DisplayText?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) == true ? 2 :
+                                item.DisplayText?.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0
+                })
+                .OrderByDescending(x => x.PrefixScore)
+                .ThenBy(x => x.Item.SortText, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.Item)
+                .ToList();
+
+            return sortedItems;
+        }
+        finally
         {
-            return [];
+            _workspaceLock.Release();
         }
-
-        var results = await service.GetCompletionsAsync(
-            document,
-            cursorPosition,
-            trigger: CreateTrigger(code, cursorPosition),
-            cancellationToken: cancellationToken);
-
-        if (results == null || results.ItemsList.Count == 0)
-        {
-            return [];
-        }
-
-        SourceText text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
-        var cache = new Dictionary<TextSpan, string>();
-        string prefix = GetCurrentPrefix(code, cursorPosition);
-
-        var sortedItems = results.ItemsList
-            .Where(item => MatchesFilterText(service, document, item, text, cache))
-            .Select(item => new {
-                Item = item,
-                PrefixScore = item.DisplayText?.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) == true ? 2 :
-                            item.DisplayText?.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0
-            })
-            .OrderByDescending(x => x.PrefixScore)
-            .ThenBy(x => x.Item.SortText, StringComparer.OrdinalIgnoreCase)
-            .Select(x => x.Item)
-            .ToList();
-        return sortedItems;
     }
 
     internal static string GetCurrentPrefix(string code, int cursorPosition)
@@ -190,25 +207,32 @@ public sealed class RoslynCompletionSession
             return code ?? string.Empty;
         }
 
-        _workspace.TryApplyChanges(
-            _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
-
-        Document document = _workspace.CurrentSolution.GetDocument(_documentId);
-        if (document == null)
+        await _workspaceLock.WaitAsync().ConfigureAwait(false);
+        try
         {
-            return code;
-        }
+            _workspace.TryApplyChanges(
+                _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
 
-        CompletionService service = CompletionService.GetService(document);
-        if (service == null)
+            Document document = _workspace.CurrentSolution.GetDocument(_documentId);
+            if (document == null)
+            {
+                return code;
+            }
+
+            CompletionService service = CompletionService.GetService(document);
+            if (service == null)
+            {
+                return code;
+            }
+
+            var change = await service.GetChangeAsync(document, item).ConfigureAwait(false);
+            SourceText updated = SourceText.From(code).WithChanges(change.TextChange);
+            return updated.ToString();
+        }
+        finally
         {
-            return code;
+            _workspaceLock.Release();
         }
-
-        var change = await service.GetChangeAsync(document, item);
-
-        SourceText updated = SourceText.From(code).WithChanges(change.TextChange);
-        return updated.ToString();
     }
     private static CompletionTrigger CreateTrigger(string code, int cursorPosition)
     {
@@ -236,34 +260,42 @@ public sealed class RoslynCompletionSession
             return string.Empty;
         }
 
-        _workspace.TryApplyChanges(
-            _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
-
-        Document document = _workspace.CurrentSolution.GetDocument(_documentId);
-        if (document == null)
+        await _workspaceLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return string.Empty;
-        }
+            _workspace.TryApplyChanges(
+                _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
 
-        CompletionService service = CompletionService.GetService(document);
-        if (service == null)
+            Document document = _workspace.CurrentSolution.GetDocument(_documentId);
+            if (document == null)
+            {
+                return string.Empty;
+            }
+
+            CompletionService service = CompletionService.GetService(document);
+            if (service == null)
+            {
+                return string.Empty;
+            }
+
+            var description = await service.GetDescriptionAsync(document, item, cancellationToken).ConfigureAwait(false);
+            if (description == null || description.Text == null)
+            {
+                return string.Empty;
+            }
+
+            StringBuilder sb = new();
+            foreach (var part in description.TaggedParts)
+            {
+                sb.Append(part.Text);
+            }
+
+            return sb.ToString().Trim();
+        }
+        finally
         {
-            return string.Empty;
+            _workspaceLock.Release();
         }
-
-        var description = await service.GetDescriptionAsync(document, item, cancellationToken).ConfigureAwait(false);
-        if (description == null || description.Text == null)
-        {
-            return string.Empty;
-        }
-
-        StringBuilder sb = new();
-        foreach (var part in description.TaggedParts)
-        {
-            sb.Append(part.Text);
-        }
-
-        return sb.ToString().Trim();
     }
 
     public async Task<string> GetSignatureTextAsync(
@@ -276,57 +308,65 @@ public sealed class RoslynCompletionSession
             return string.Empty;
         }
 
-        _workspace.TryApplyChanges(
-            _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
-
-        Document document = _workspace.CurrentSolution.GetDocument(_documentId);
-        if (document == null)
+        await _workspaceLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return string.Empty;
-        }
+            _workspace.TryApplyChanges(
+                _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
 
-        SyntaxNode root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
-        SemanticModel model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
-        if (root == null || model == null)
-        {
-            return string.Empty;
-        }
-
-        int caret = Mathf.Clamp(cursorPosition, 0, code.Length);
-        SyntaxNode node = root.FindToken(Math.Max(0, caret - 1)).Parent;
-        if (node == null)
-        {
-            return string.Empty;
-        }
-
-        IMethodSymbol method = null;
-        int openParen = -1;
-
-        InvocationExpressionSyntax invocation = node.AncestorsAndSelf().OfType<InvocationExpressionSyntax>().FirstOrDefault();
-        if (invocation != null)
-        {
-            var info = model.GetSymbolInfo(invocation.Expression, cancellationToken);
-            method = info.Symbol as IMethodSymbol ?? info.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
-            openParen = invocation.ArgumentList != null ? invocation.ArgumentList.OpenParenToken.SpanStart : -1;
-        }
-        else
-        {
-            ObjectCreationExpressionSyntax creation = node.AncestorsAndSelf().OfType<ObjectCreationExpressionSyntax>().FirstOrDefault();
-            if (creation != null)
+            Document document = _workspace.CurrentSolution.GetDocument(_documentId);
+            if (document == null)
             {
-                var info = model.GetSymbolInfo(creation, cancellationToken);
-                method = info.Symbol as IMethodSymbol ?? info.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
-                openParen = creation.ArgumentList != null ? creation.ArgumentList.OpenParenToken.SpanStart : -1;
+                return string.Empty;
             }
-        }
 
-        if (method == null)
+            SyntaxNode root = await document.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
+            SemanticModel model = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+            if (root == null || model == null)
+            {
+                return string.Empty;
+            }
+
+            int caret = Mathf.Clamp(cursorPosition, 0, code.Length);
+            SyntaxNode node = root.FindToken(Math.Max(0, caret - 1)).Parent;
+            if (node == null)
+            {
+                return string.Empty;
+            }
+
+            IMethodSymbol method = null;
+            int openParen = -1;
+
+            InvocationExpressionSyntax invocation = node.AncestorsAndSelf().OfType<InvocationExpressionSyntax>().FirstOrDefault();
+            if (invocation != null)
+            {
+                var info = model.GetSymbolInfo(invocation.Expression, cancellationToken);
+                method = info.Symbol as IMethodSymbol ?? info.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+                openParen = invocation.ArgumentList != null ? invocation.ArgumentList.OpenParenToken.SpanStart : -1;
+            }
+            else
+            {
+                ObjectCreationExpressionSyntax creation = node.AncestorsAndSelf().OfType<ObjectCreationExpressionSyntax>().FirstOrDefault();
+                if (creation != null)
+                {
+                    var info = model.GetSymbolInfo(creation, cancellationToken);
+                    method = info.Symbol as IMethodSymbol ?? info.CandidateSymbols.OfType<IMethodSymbol>().FirstOrDefault();
+                    openParen = creation.ArgumentList != null ? creation.ArgumentList.OpenParenToken.SpanStart : -1;
+                }
+            }
+
+            if (method == null)
+            {
+                return string.Empty;
+            }
+
+            int activeIndex = GetActiveParameterIndex(code, openParen, caret, method.Parameters.Length);
+            return BuildSignatureText(method, activeIndex);
+        }
+        finally
         {
-            return string.Empty;
+            _workspaceLock.Release();
         }
-
-        int activeIndex = GetActiveParameterIndex(code, openParen, caret, method.Parameters.Length);
-        return BuildSignatureText(method, activeIndex);
     }
 
     private static int GetActiveParameterIndex(string code, int openParenIndex, int cursorPosition, int parameterCount)
