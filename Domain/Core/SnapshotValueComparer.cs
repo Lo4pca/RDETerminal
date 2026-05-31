@@ -30,25 +30,23 @@ public static class SnapshotValueComparer
                 return false;
             }
 
-            var keysA = dictA.Keys.Cast<object>().ToList();
-            foreach (object key in keysA)
+            // Build a lookup over dictB so each key search is O(1) rather
+            // than O(n), reducing the overall comparison from O(n²) to O(n).
+            var comparer = new ObjectComparer();
+            var lookupB = new Dictionary<object, object>(dictB.Count, comparer);
+            foreach (DictionaryEntry entry in dictB)
             {
-                bool found = false;
-                foreach (object keyB in dictB.Keys)
-                {
-                    if (AreEqual(key, keyB))
-                    {
-                        if (!AreEqual(dictA[key], dictB[keyB]))
-                        {
-                            return false;
-                        }
+                lookupB[entry.Key] = entry.Value;
+            }
 
-                        found = true;
-                        break;
-                    }
+            foreach (DictionaryEntry entry in dictA)
+            {
+                if (!lookupB.TryGetValue(entry.Key, out object valueB))
+                {
+                    return false;
                 }
 
-                if (!found)
+                if (!AreEqual(entry.Value, valueB))
                 {
                     return false;
                 }

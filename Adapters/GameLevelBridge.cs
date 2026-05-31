@@ -5,14 +5,13 @@ using System.Linq;
 using RDLevelEditor;
 using RDETerminal.Domain.Abstractions;
 using RDETerminal.Domain.Core;
-using RDETerminal.Domain;
 
 namespace RDETerminal.Adapters;
 
-public sealed class GameLevelBridge(EditorAdapter editorAdapter) : IGameLevelBridge
+public sealed class GameLevelBridge(EditorAdapter editorAdapter, ReflectionGameEventBridge eventBridge) : IGameLevelBridge
 {
     private readonly EditorAdapter _editorAdapter = editorAdapter ?? throw new ArgumentNullException(nameof(editorAdapter));
-    private readonly ReflectionGameEventBridge _eventBridge = BridgeServices.Shared.EventBridge;
+    private readonly ReflectionGameEventBridge _eventBridge = eventBridge ?? throw new ArgumentNullException(nameof(eventBridge));
 
     public LevelDocument CaptureLevel()
     {

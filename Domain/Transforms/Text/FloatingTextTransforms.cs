@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 using RDETerminal.Domain.Core;
 using RDETerminal.Domain.Transforms.Common;
-using RDETerminal.Domain.Queries.Common;
+using RDETerminal.Domain.Queries;
 
 namespace RDETerminal.Domain.Transforms.Text;
 

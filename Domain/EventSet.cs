@@ -135,10 +135,10 @@ public sealed class EventSet(IEnumerable<LevelEventSnapshot> items) : IEnumerabl
         }
 
         string type = string.IsNullOrWhiteSpace(item.Type) ? "unknown" : item.Type;
-        string id = item.GetString("id");
-        string bar = item.GetString("bar");
-        string beat = item.GetString("beat");
-        string text = item.GetString("text");
+        string id = item.GetString(EventFieldNames.Id);
+        string bar = item.GetString(EventFieldNames.Bar);
+        string beat = item.GetString(EventFieldNames.Beat);
+        string text = item.GetString(EventFieldNames.Text);
         string action = item.Action.ToString();
 
         List<string> parts = [action, type];

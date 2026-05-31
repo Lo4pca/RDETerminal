@@ -1,13 +1,13 @@
-using RDETerminal.Adapters;
+using RDETerminal.Domain.Abstractions;
 
 namespace RDETerminal.Domain;
 
-public sealed class EventApi(EditorAdapter adapter)
+public sealed class EventApi(ISelectedEventsSource source)
 {
-    private readonly EditorAdapter _adapter = adapter;
+    private readonly ISelectedEventsSource _source = source;
 
     public EventSet Sel()
     {
-        return _adapter.GetSelectedEvents();
+        return _source.GetSelectedEvents();
     }
 }

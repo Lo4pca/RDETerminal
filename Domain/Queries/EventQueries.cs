@@ -1,7 +1,7 @@
 using System;
 using RDETerminal.Domain.Core;
 
-namespace RDETerminal.Domain.Queries.Common;
+namespace RDETerminal.Domain.Queries;
 
 public static class EventQueries
 {
