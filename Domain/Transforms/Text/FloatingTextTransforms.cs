@@ -11,6 +11,7 @@ public static class FloatingTextTransforms
 {
     public static LevelDocument SplitAndAdvanceTextsWithOffset(
         LevelDocument level,
+        Func<LevelEventSnapshot, bool> filter,
         double offset = 0.1)
     {
         if (level == null) throw new ArgumentNullException(nameof(level));
@@ -20,7 +21,7 @@ public static class FloatingTextTransforms
 
         foreach (var evt in level.Events)
         {
-            if (EventQueries.TypeIs(evt,EventTypeNames.FloatingText))
+            if (EventQueries.TypeIs(evt,EventTypeNames.FloatingText)&&filter(evt))
             {
                 string originalText = evt.GetString(EventFieldNames.Text, string.Empty);
                 string modifiedText = NormalizeFloatingText(originalText);
@@ -28,7 +29,7 @@ public static class FloatingTextTransforms
                 var modified = evt.Clone();
                 modified.Set(EventFieldNames.Text, modifiedText);
 
-                int id = GetStableId(modified);
+                int id = modified.GetInt(EventFieldNames.Id,-1);
                 int bar = modified.GetInt(EventFieldNames.Bar);
                 double beat = modified.GetDouble(EventFieldNames.Beat);
                 int y = modified.GetInt(EventFieldNames.Y);
@@ -54,12 +55,8 @@ public static class FloatingTextTransforms
             }
             else if (EventQueries.TypeIs(evt,EventTypeNames.AdvanceText))
             {
-                int id = GetStableId(evt);
-                if (floatingTextIds.Contains(id))
-                {
-                    continue;
-                }
-
+                int id = evt.GetInt(EventFieldNames.Id,-1);
+                if (floatingTextIds.Contains(id)) evt.MarkForDelete();
                 newEvents.Add(evt);
             }
             else
@@ -214,21 +211,5 @@ public static class FloatingTextTransforms
         }
 
         return count;
-    }
-
-    private static int GetStableId(LevelEventSnapshot evt)
-    {
-        if (evt == null)
-        {
-            return -1;
-        }
-
-        object raw = evt.Get(EventFieldNames.Id);
-        if (raw == null)
-        {
-            return -1;
-        }
-
-        return Convert.ToInt32(raw);
     }
 }

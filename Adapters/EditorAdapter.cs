@@ -42,7 +42,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISele
         return new EventSet(items);
     }
 
-    public LevelEventControl_Base CreateEvent(
+    private LevelEventControl_Base CreateEvent(
         LevelEvent_Base levelEvent,
         Tab tab,
         BarAndBeat barAndBeat,
@@ -70,7 +70,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISele
         return control;
     }
 
-    public void DeleteEventControl(LevelEventControl_Base eventControl, bool selectControlToTheLeft, bool sound = false)
+    private void DeleteEventControl(LevelEventControl_Base eventControl, bool selectControlToTheLeft, bool sound = false)
     {
         Editor.DeleteEventControl(eventControl, selectControlToTheLeft, sound);
     }

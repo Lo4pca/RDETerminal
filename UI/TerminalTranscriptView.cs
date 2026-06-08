@@ -67,7 +67,7 @@ internal sealed class TerminalTranscriptView
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(_transcriptContent);
 
-        _scrollRect?.verticalNormalizedPosition = 1f;
+        _scrollRect?.verticalNormalizedPosition = 0f;
     }
 
     private string BuildTranscript()
