@@ -42,39 +42,6 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISele
         return new EventSet(items);
     }
 
-    public LevelEventControl_Base CreateEvent(
-        LevelEvent_Base levelEvent,
-        Tab tab,
-        BarAndBeat barAndBeat,
-        Action<LevelEvent_Base> configure = null,
-        bool selectCreatedControl = true,
-        bool skipSaveState = false)
-    {
-        if (levelEvent == null)
-        {
-            throw new ArgumentNullException(nameof(levelEvent));
-        }
-
-        levelEvent.barAndBeat = barAndBeat;
-        configure?.Invoke(levelEvent);
-        levelEvent.OnCreate();
-
-        LevelEventControl_Base control = Editor.CreateEventControl(levelEvent, tab, skipSaveState) ?? throw new InvalidOperationException("CreateEventControl returns null.");
-        control.UpdateUI();
-
-        if (selectCreatedControl)
-        {
-            Editor.SelectEventControl(control, false);
-        }
-
-        return control;
-    }
-
-    public void DeleteEventControl(LevelEventControl_Base eventControl, bool selectControlToTheLeft, bool sound = false)
-    {
-        Editor.DeleteEventControl(eventControl, selectControlToTheLeft, sound);
-    }
-
     public LevelEventControl_Base CreateEventFromSnapshot(
         LevelEventSnapshot snapshot,
         bool selectCreatedControl = true,
@@ -170,7 +137,70 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISele
             skipSaveState);
     }
 
-    public EventSet CreateEvents(
+    public EventSet CreateEventsFromControl(
+        string eventTypeName,
+        float spacing,
+        int number,
+        int numTracks,
+        LevelEventControl_Base anchorControl,
+        bool selectLastCreatedControl = true,
+        bool skipSaveState = false)
+    {
+        if (anchorControl == null)
+        {
+            throw new ArgumentNullException(nameof(anchorControl));
+        }
+
+        if (anchorControl.levelEvent == null)
+        {
+            throw new InvalidOperationException("anchorControl.levelEvent is null.");
+        }
+        return CreateEvents(
+            eventTypeName,
+            anchorControl.levelEvent.barAndBeat,
+            spacing,
+            number,
+            numTracks,
+            anchorControl.levelEvent.y,
+            Editor.currentTab,
+            selectLastCreatedControl,
+            skipSaveState);
+    }
+
+    private void DeleteEventControl(LevelEventControl_Base eventControl, bool selectControlToTheLeft, bool sound = false)
+    {
+        Editor.DeleteEventControl(eventControl, selectControlToTheLeft, sound);
+    }
+
+    private LevelEventControl_Base CreateEvent(
+        LevelEvent_Base levelEvent,
+        Tab tab,
+        BarAndBeat barAndBeat,
+        Action<LevelEvent_Base> configure = null,
+        bool selectCreatedControl = true,
+        bool skipSaveState = false)
+    {
+        if (levelEvent == null)
+        {
+            throw new ArgumentNullException(nameof(levelEvent));
+        }
+
+        levelEvent.barAndBeat = barAndBeat;
+        configure?.Invoke(levelEvent);
+        levelEvent.OnCreate();
+
+        LevelEventControl_Base control = Editor.CreateEventControl(levelEvent, tab, skipSaveState) ?? throw new InvalidOperationException("CreateEventControl returns null.");
+        control.UpdateUI();
+
+        if (selectCreatedControl)
+        {
+            Editor.SelectEventControl(control, false);
+        }
+
+        return control;
+    }
+
+    private EventSet CreateEvents(
         string eventTypeName,
         BarAndBeat startBarAndBeat,
         float spacing,
@@ -258,36 +288,6 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISele
         }
 
         return created;
-    }
-
-    public EventSet CreateEventsFromControl(
-        string eventTypeName,
-        float spacing,
-        int number,
-        int numTracks,
-        LevelEventControl_Base anchorControl,
-        bool selectLastCreatedControl = true,
-        bool skipSaveState = false)
-    {
-        if (anchorControl == null)
-        {
-            throw new ArgumentNullException(nameof(anchorControl));
-        }
-
-        if (anchorControl.levelEvent == null)
-        {
-            throw new InvalidOperationException("anchorControl.levelEvent is null.");
-        }
-        return CreateEvents(
-            eventTypeName,
-            anchorControl.levelEvent.barAndBeat,
-            spacing,
-            number,
-            numTracks,
-            anchorControl.levelEvent.y,
-            Editor.currentTab,
-            selectLastCreatedControl,
-            skipSaveState);
     }
 
     private EventSet CaptureCreatedEvents(IEnumerable<LevelEventControl_Base> controls)

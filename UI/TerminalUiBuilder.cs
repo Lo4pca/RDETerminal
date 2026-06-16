@@ -53,7 +53,6 @@ internal static class TerminalUiBuilder
     // ── Entry point ───────────────────────────────────────────────────────────
 
     internal static UiBuildResult Build(
-        RectTransform windowRt,
         InputField.OnValidateInput onValidateInput,
         Action<string> onInputChanged,
         MonoBehaviour coroutineHost)

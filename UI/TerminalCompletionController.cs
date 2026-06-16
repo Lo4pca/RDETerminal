@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.Completion;
 using Microsoft.CodeAnalysis.Tags;
@@ -129,7 +128,6 @@ internal sealed class TerminalCompletionController
         _completionIndex = (_completionIndex + delta + _completionItems.Count) % _completionItems.Count;
         RefreshPanel();
         _ = RefreshDetailPanelAsync();
-        LogItems();
     }
 
     internal async void Commit()
@@ -203,7 +201,6 @@ internal sealed class TerminalCompletionController
         RefreshPanel();
         await RefreshDetailPanelAsync();
         await RefreshSignaturePanelAsync();
-        LogItems();
     }
 
     private void RefreshPanel()
@@ -383,32 +380,5 @@ internal sealed class TerminalCompletionController
             .Replace("&", "&amp;")
             .Replace("<", "&lt;")
             .Replace(">", "&gt;");
-    }
-
-    private void LogItems()
-    {
-        if (_completionItems.Count == 0)
-        {
-            return;
-        }
-
-        StringBuilder sb = new();
-        sb.Append("[Completion] count=").Append(_completionItems.Count).Append(" => ");
-
-        int limit = Math.Min(_completionItems.Count, 8);
-        for (int i = 0; i < limit; i++)
-        {
-            if (i > 0) sb.Append(", ");
-
-            if (i == _completionIndex)
-                sb.Append('[').Append(_completionItems[i].DisplayText).Append(']');
-            else
-                sb.Append(_completionItems[i].DisplayText);
-        }
-
-        if (_completionItems.Count > limit)
-        {
-            sb.Append(", ...");
-        }
     }
 }

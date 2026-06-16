@@ -19,11 +19,6 @@ public class ReflectionGameEventBridge : IGameEventBridge
 
     private static readonly ConcurrentDictionary<Type, MemberMap> Cache = new();
 
-    public virtual bool CanHandle(Type eventType, string snapshotType)
-    {
-        return true;
-    }
-
     public virtual LevelEventSnapshot Capture(object gameEvent)
     {
         if (gameEvent == null)
@@ -102,7 +97,6 @@ public class ReflectionGameEventBridge : IGameEventBridge
                     result.SkippedCount++;
                     continue;
                 }
-
                 accessor.Set(gameEvent, converted);
                 snapshot.MarkClean(key);
                 result.WrittenCount++;

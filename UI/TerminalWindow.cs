@@ -190,7 +190,6 @@ public sealed class TerminalWindow : MonoBehaviour
         DestroyNativeUi();
 
         var result = TerminalUiBuilder.Build(
-            GetComponent<RectTransform>() ?? gameObject.AddComponent<RectTransform>(),
             _completion.OnValidateInput,
             _completion.OnInputChanged,
             this);
@@ -272,7 +271,7 @@ public sealed class TerminalWindow : MonoBehaviour
     {
         if (_kernel == null || _inputField == null) return;
 
-        string code = _inputField.text;
+        string code = _inputField.text.Trim();
         if (string.IsNullOrWhiteSpace(code)) return;
 
         _history.Add(code);

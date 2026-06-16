@@ -32,9 +32,4 @@ public sealed class GameApi(IGameLevelBridge levelBridge, NotebookSession sessio
         _session.WorkingLevel = doc;
         return _levelBridge.ApplyLevel(doc);
     }
-
-    public LevelDocument Refresh()
-    {
-        return Capture();
-    }
 }

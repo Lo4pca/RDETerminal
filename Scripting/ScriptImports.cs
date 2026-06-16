@@ -17,8 +17,7 @@ public static class ScriptImports
                 typeof(EventSet).Assembly,
                 typeof(LevelDocument).Assembly,
                 typeof(ScriptGlobals).Assembly,
-                typeof(Tab).Assembly,
-                typeof(BarAndBeat).Assembly)
+                typeof(Tab).Assembly)
             .WithImports(
                 "System",
                 "System.Linq",
