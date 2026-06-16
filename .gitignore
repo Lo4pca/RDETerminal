@@ -6,3 +6,4 @@ RDETerminal.sln
 bin
 lib
 obj
+*.zip

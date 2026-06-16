@@ -7,7 +7,7 @@
 本项目的代码由AI生成，人工校验（然而我什么也没校验出来）。各AI参与的部分如下：
 - ChatGPT：项目架构与具体实现
 - Claude：代码重构
-- DeepSeek：杂项问题解答
+- DeepSeek：杂项问题解答与文档编写
 
 项目开发时参考了如下资料：
 - BepInEx官方教程： https://docs.bepinex.dev/articles/dev_guide/plugin_tutorial/index.html
@@ -20,53 +20,184 @@
 
 `Random`提出了项目创意并负责实机测试，他在项目开发过程中给出了诸多建议
 
+## 使用方法
+
+### 1. 面板操作
+
+- **开关面板**：在编辑器界面按 `F1` 键。
+- **执行代码**：在输入框聚焦时按 `Ctrl+Enter`。
+- **命令历史**：聚焦输入框后按 **上/下箭头** 切换已执行过的命令。  
+  *若补全面板已弹出，则上下箭头改为切换补全项，`Enter` 确认补全。*
+- **拖拽面板**：按住标题栏 `RDETerminal` 拖动。
+
+> 相关逻辑见 `UI/TerminalWindow.cs` 的 `Update()` 方法。
+
+### 2. 快速上手示例
+
+捕获当前关卡的所有事件：
+
+```c#
+var l = game.Capture();
+```
+
+使用变换函数修改事件（例如 `FloatingTextTransforms.SplitAndAdvanceTextsWithOffset`）：
+
+```c#
+l = FloatingTextTransforms.SplitAndAdvanceTextsWithOffset(
+    l,
+    evt => EventQueries.BarAtLeast(evt, 5),
+    0.2
+);
+```
+
+此操作会：
+- 筛选 `bar ≥ 5` 的 `FloatingText` 事件；
+- 将其 `text` 字段中每个字符间插入 `/`；
+- 自动插入对应数量的 `AdvanceText` 事件，间隔 0.2 beat（模拟对话框逐字显示效果）。
+
+> **注意**：以上变换仅修改内存中的 `LevelDocument` 对象，不会影响编辑器中的实际事件。
+
+将修改应用到编辑器：
+
+```c#
+game.Apply(l);
+```
+
+### 3. 脚本 API 参考
+
+#### 全局变量（`ScriptGlobals`）
+
+| 变量 | 类型 | 说明 |
+|------|------|------|
+| `session` | `NotebookSession` | 会话管理器，包含已执行单元格、变量存储等。 |
+| `vars` | `VarApi` | 变量操作：`Set(name, value)`、`TryGet(name, out value)`、`Get<T>(name)`。 |
+| `events` | `EventApi` | 事件操作：`Sel()` 获取当前编辑器中选中的事件集。 |
+| `sel` | `Func<EventSet>` | 等价于 `() => events.Sel()`，可简写为 `sel()`。 |
+| `game` | `GameApi` | 关卡操作：`Capture()`、`Apply()`、`Current` 属性。 |
+| `editor` | `EditorAdapter` | 编辑器底层操作：创建事件、获取选中事件等。 |
+| `ans` | `object` | 存储上一个脚本单元的返回值。 |
+| `Level` | `LevelDocument` | `session.WorkingLevel` 的别名，用于快速读写当前关卡快照。 |
+
+#### `session` 常用成员
+
+- `Cells` – 已执行过的 `NotebookCell` 列表。
+- `WorkingLevel` – 当前正在编辑的关卡快照（`game.Capture()` 的返回值，也是 `game.Apply()` 的默认参数）。
+- `Print(object value)` – 将值加入输出缓冲区。
+- `ConsumePrintedOutput()` – 获取并清空输出缓冲区内容。
+
+#### `game` 常用成员
+
+- `Current` – `session.WorkingLevel` 的别名。
+- `Capture()` – 捕获当前编辑器关卡，生成 `LevelDocument`，并自动存入 `session.WorkingLevel`。
+- `Apply(LevelDocument level = null)` – 将 `level` 应用到编辑器；若未指定，则应用 `session.WorkingLevel`。
+
+#### `editor` 常用成员
+
+- `GetSelectedEvents()` – 返回当前选中的事件集（`events.Sel()` 的底层实现）。
+- `CreateEvents` 系列方法 – 批量创建事件。  
+  常用签名：
+  ```csharp
+  EventSet CreateEvents(
+      string eventTypeName,
+      float spacing,
+      int number,
+      int numTracks,
+      int startY = 0
+  )
+  ```
+  - 若调用前**有选中事件**，则从选中事件的位置开始向后排列新事件（忽略 `startY`）。
+  - 否则从第 1 小节第 1 拍、纵坐标 `startY` 处开始排列。
+  - 事件间隔 `spacing`（拍），分布在 `numTracks` 个轨道（纵坐标依次递增，循环使用）。
+
+#### 查询函数（`Domain.Queries.EventQueries`）
+
+| 函数 | 说明 |
+|------|------|
+| `TypeIs(evt, typeName)` | 判断事件类型是否匹配（不区分大小写）。 |
+| `BarAtLeast(evt, bar)` | 事件所在小节 ≥ `bar`。 |
+| `BeatAtMost(evt, beat)` | 事件所在拍 ≤ `beat`。 |
+
+#### 变换函数（`Domain.Transforms`）
+
+**通用变换（`Common.EventTransforms`）**
+
+| 函数 | 说明 |
+|------|------|
+| `SetEventSpacingStartFrom(level, startBar, startBeat, spacing, filter)` | 对满足 `filter` 的事件重新设置时间位置，从 `(startBar, startBeat)` 开始，每个事件间隔 `spacing` 拍。 |
+
+**文本专用变换（`Text.FloatingTextTransforms`）**
+
+| 函数 | 说明 |
+|------|------|
+| `SplitAndAdvanceTextsWithOffset(level, filter, offset)` | 将满足条件的 `FloatingText` 文本按字符分割（插入 `/`），并在每个字符后生成 `AdvanceText` 事件，间隔 `offset` 拍。 |
+| `RandomizeTextsAnglesPositions(level, minX, maxX, minY, maxY, filter, rng)` | 随机改变满足条件的 `FloatingText` 的显示角度和位置。 |
+| `SetTextFontSize(level, newSize, filter)` | 修改满足条件的 `FloatingText` 的字体大小。 |
+| `SetTextDuration(level, newDuration, filter)` | 修改满足条件的 `FloatingText` 的持续时长（淡出速率）。 |
+
+> 所有变换函数均返回新的 `LevelDocument` 实例，原对象保持不变，便于链式调用。
+
 ## 项目架构
 
-项目由以下五个部分组成：
-- Adapters: 负责插件与游戏逻辑的沟通
-    - `EditorAdapter.cs`: 对游戏编辑器内置函数的包装
-    - `GameLevelBridge.cs`: 负责对关卡截取快照或将快照应用到关卡
-    - `ReflectionGameEventBridge.cs`: 负责对单个事件截取快照或将快照应用到事件
-    - `ReflectionUtil.cs`: 反射操作的辅助函数
-- Domain: 定义项目使用的数据类型与脚本可用的函数
-    - Abstractions: 底层抽象接口
-    - Core: 核心数据类型
-        - `ApplyResults.cs`: 定义应用快照到事件或关卡后返回的应用结果
-        - `EventFieldNames.cs`: 关卡事件的属性名
-        - `EventTypeNames.cs`: 关卡事件的类型名
-        - `LevelDocument.cs`: 用于包装多个事件快照，`GameLevelBridge`应用关卡时接收的数据类型
-        - `LevelEventSnapshot.cs`: 关卡快照
-        - `SnapshotValueCloner.cs`: 用于深度拷贝（deep-clone）关卡快照
-        - `SnapshotValueComparer.cs`: 用于比较两个快照是否相同
-    - Queries: 提供给脚本调用的用于过滤事件的函数
-    - Transforms: 提供给脚本调用的用于修改事件的函数
-        - Common: 适用于所有类型事件的函数
-        - Text: 仅适用于`FloatingText`类型事件的函数
-    - `EventApi.cs`: 获取当前选中事件的快捷入口
-    - `EventSet.cs`: 用于批量处理多个事件快照
-    - `VarApi.cs`: 处理当前脚本会话的变量
-- Notebook: 执行代码的终端的组成部分
-    - `CommandHistory.cs`: 记录历史执行的命令
-    - `NotebookCell.cs`: 代码单元格
-    - `NotebookCellResult.cs`: 代码执行结果
-    - `NotebookKernel.cs`: 包含所有Notebook的核心组件
-    - `NotebookSession.cs`: 管理当前会话的变量、代码单元格与当前正在处理的关卡
-    - `RoslynCompletionSession.cs`: 负责调用Roslyn提供的补全功能
-- Scripting: 执行脚本代码并定义可用函数范围
-    - `GameApi.cs`: 暴露`GameLevelBridge`提供的api
-    - `RoslynScriptHost.cs`: 负责调用Roslyn执行脚本代码
-    - `ScriptGlobals.cs`: 脚本可使用的全局变量
-    - `ScriptImports.cs`: 脚本可用的assembly与环境中已存在的引用
-- UI: 渲染终端窗口并响应用户输入
-    - `TerminalBootstrap.cs`: Harmony补丁的调用入口，负责组装终端的所有零件
-    - `TerminalCompletionController.cs`: 代码补全功能相关的UI逻辑
-    - `TerminalTranscriptView.cs`: 显示代码执行结果的UI逻辑
-    - `TerminalUiBuilder.cs`: 创建并组装终端的UI组件
-    - `TerminalWindow.cs`: 终端最顶层的`MonoBehaviour`脚本，负责所有组件的生命周期并响应用户输入
+项目分为五个核心层：
+
+### 1. Adapters
+封装与游戏编辑器及事件系统的底层交互。
+
+- `EditorAdapter.cs` – 包装编辑器内置方法，提供事件创建、选中事件获取等操作。  
+- `GameLevelBridge.cs` – 实现关卡快照的捕获与应用（全量同步）。  
+- `ReflectionGameEventBridge.cs` – 基于反射与表达式树，实现单个事件快照的捕获与应用（增量更新）。  
+- `ReflectionUtil.cs` – 反射操作的通用辅助函数。
+
+### 2. Domain
+定义数据模型、核心类型以及脚本可调用的查询/变换函数。
+
+- **Abstractions** – 底层接口定义。  
+- **Core** – 核心数据类型：  
+  - `ApplyResults.cs` – 应用快照后的执行结果统计。  
+  - `EventFieldNames.cs` / `EventTypeNames.cs` – 事件字段名与类型名常量。  
+  - `LevelDocument.cs` – 多个事件快照的容器，用于关卡级同步。  
+  - `LevelEventSnapshot.cs` – 单个事件快照，携带变化追踪。  
+  - `SnapshotValueCloner.cs` / `SnapshotValueComparer.cs` – 快照的深度克隆与相等比较。  
+- **Queries** – 供脚本使用的过滤函数（如按类型、位置筛选）。  
+- **Transforms** – 供脚本使用的变换函数：  
+  - `Common` – 通用事件变换。  
+  - `Text` – 专用于 `FloatingText` 事件的文本处理。  
+- `EventApi.cs` – 快捷获取当前选中事件。  
+- `EventSet.cs` – 批量操作多个事件快照。  
+- `VarApi.cs` – 管理脚本会话中的变量。
+
+### 3. Notebook
+管理终端会话、代码执行与补全服务。
+
+- `CommandHistory.cs` – 记录历史输入命令。  
+- `NotebookCell.cs` – 单个代码单元格。  
+- `NotebookCellResult.cs` – 单元格执行结果。  
+- `NotebookKernel.cs` – 整合所有 notebook 组件。  
+- `NotebookSession.cs` – 维护会话变量、单元格列表及当前关卡快照。  
+- `RoslynCompletionSession.cs` – 调用 Roslyn 提供代码补全。
+
+### 4. Scripting
+配置脚本编译与执行环境，暴露可用的 API。
+
+- `GameApi.cs` – 将 `GameLevelBridge` 的能力暴露给脚本。  
+- `RoslynScriptHost.cs` – 调用 Roslyn 执行脚本代码。  
+- `ScriptGlobals.cs` – 脚本可访问的全局对象（`session`、`vars`、`game` 等）。  
+- `ScriptImports.cs` – 配置脚本编译所需的程序集引用与默认导入命名空间。
+
+### 5. UI
+构建终端窗口并响应用户交互。
+
+- `TerminalBootstrap.cs` – Harmony 补丁入口，完成依赖组装与窗口初始化。  
+- `TerminalCompletionController.cs` – 管理补全面板的显示、选择与提交。  
+- `TerminalTranscriptView.cs` – 管理代码执行结果的显示区域。  
+- `TerminalUiBuilder.cs` – 动态创建并布局所有 UI 组件。  
+- `TerminalWindow.cs` – 顶层 `MonoBehaviour`，负责窗口生命周期、输入循环与场景切换处理。
 
 ## 实现细节
 
-这里会过一下文件中比较复杂的代码，学习以前没用过的api并分析架构中的各个文件是如何联系在一起的
+<details>
+
+<summary>这是我个人的笔记，过了一下文件中比较复杂的代码，学习以前没用过的api</summary>
 
 （可能有误）
 
@@ -127,3 +258,20 @@
     ```
 
 利用表达式树访问未知类型的属性与字段要比单纯使用反射快得多。然而当初设计这套系统的chatgpt并不知道所有事件类型都有个基类，这堆复杂的操作相比直接调用还是慢了不少
+
+2. `RoslynCompletionSession.cs`
+
+roslyn相关的api可以在网上搜到，AI也能完成个95%；于是这里是一些AI没有一次做对的地方
+
+`MefHostServices`为`AdhocWorkspace`提供了代码补全服务，创建时直接传入`MefHostServices.DefaultAssemblies`即可，无需手动传入`Microsoft.CodeAnalysis`相关的assembly。有很多链接，比如 https://stackoverflow.com/questions/42471015/roslyn-service-is-null ，反映`DefaultAssemblies`不足以获取`CompletionService`，但个人实测没有问题。可能是roslyn版本的问题
+
+`ProjectInfo.Create`的`metadataReferences`参数提供roslyn分析代码时使用的外部程序集。比如往里面添加`a.dll`，roslyn便可以提供`a.dll`里的类型的补全。代码加入了`ScriptGlobals`所在的dll和`object`所在的dll，roslyn便能提供项目中定义的类型（变换函数与各种api）以及`.NET`基础类型的补全
+
+`isSubmission: true`标记当前项目为“交互式会话”，允许代码像脚本一样被逐块执行，不需要写出完整的类和成员定义。不加这个参数会导致roslyn穷举所有可能的补全项，给出的内容与上下文毫无关系
+
+`hostObjectType`指定代码可以访问的全局变量类
+
+接下来是`GetItemsAsync`函数调用的`service.GetCompletionsAsync`。我以为这个函数可以直接模拟vscode的补全逻辑，结果单纯按照`SortText`排序`ItemsList`只能得到按照字母顺序排列的当前上下文可用的关键词。查阅`RoslynPad`项目的代码并与AI沟通后，我确认这是预期行为，IDE等调用服务的一方需要自行编写期望的排序逻辑。于是我“借用”了`RoslynPad`对排序的处理，并让gpt写了一个匹配前缀的函数
+
+`GetCompletionsAsync`返回补全项时的行为不仅与代码上下文有关，还与传入的`CompletionTrigger`有关。可以从任何字符构建`CompletionTrigger`，但似乎只有部分特殊字符（见`CreateTrigger`函数，列出的字符可能不完全）能触发补全。`CompletionTrigger.Invoke`则可以强制触发补全
+</details>

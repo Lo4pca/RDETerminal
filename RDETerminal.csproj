@@ -117,6 +117,8 @@
     <Copy SourceFiles="@(FilesToCopy)"
           DestinationFolder="$(PluginOutputDir)"
           SkipUnchangedFiles="true" />
+    
+    <ZipDirectory SourceDirectory="$(PluginOutputDir)" DestinationFile="$(ProjectName)_v$(Version).zip" Overwrite="true" />
   </Target>
 
 </Project>
