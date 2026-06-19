@@ -274,4 +274,6 @@ roslyn相关的api可以在网上搜到，AI也能完成个95%；于是这里是
 接下来是`GetItemsAsync`函数调用的`service.GetCompletionsAsync`。我以为这个函数可以直接模拟vscode的补全逻辑，结果单纯按照`SortText`排序`ItemsList`只能得到按照字母顺序排列的当前上下文可用的关键词。查阅`RoslynPad`项目的代码并与AI沟通后，我确认这是预期行为，IDE等调用服务的一方需要自行编写期望的排序逻辑。于是我“借用”了`RoslynPad`对排序的处理，并让gpt写了一个匹配前缀的函数
 
 `GetCompletionsAsync`返回补全项时的行为不仅与代码上下文有关，还与传入的`CompletionTrigger`有关。可以从任何字符构建`CompletionTrigger`，但似乎只有部分特殊字符（见`CreateTrigger`函数，列出的字符可能不完全）能触发补全。`CompletionTrigger.Invoke`则可以强制触发补全
+
+*题外话：在编写补全功能时，我和chatgpt掰扯了很久。因为我不知道补全功能该怎么做，由什么组件构成，我只能给出“请编写一个由Roslyn驱动的上下文补全功能，辅助用户在终端面板中编写代码”这样模糊的提示词。得到的结果自然是一团糟，UI全部糊成一团，也不知道roslyn是否正常运行。我尝试自行修复代码，但我对unity UI代码编写一窍不通，前前后后和chatgpt改了一个多星期却仍然在原地踏步。后面我突然“开窍”，意识到虽然chatgpt给的代码跑不了，但是这份代码指出了补全功能应有的全部组件；那么我手动拆分，叫chatgpt每次只实现一个组件，测试成功后再编写下一个组件会怎么样？效果竟出奇的好，目前的UI几乎是chatgpt一次就成功生成的，即使出现问题也是容易描述的细节问题*
 </details>

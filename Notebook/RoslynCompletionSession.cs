@@ -11,6 +11,7 @@ using Microsoft.CodeAnalysis.Completion;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Text;
 using RDETerminal.Scripting;
+using RDETerminal.Scripting.HotReload;
 using UnityEngine;
 
 namespace RDETerminal.Notebook;
@@ -20,6 +21,7 @@ public sealed class RoslynCompletionSession
     private readonly AdhocWorkspace _workspace;
     private readonly ProjectId _projectId;
     private readonly DocumentId _documentId;
+    private readonly IReadOnlyList<MetadataReference> _baseReferences;
 
     /// <summary>
     /// Serialises all workspace mutations. AdhocWorkspace is not thread-safe,
@@ -46,8 +48,10 @@ public sealed class RoslynCompletionSession
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(ScriptGlobals).Assembly.Location)
         ];
-    public RoslynCompletionSession()
+    public RoslynCompletionSession(IEnumerable<MetadataReference> baseReferences)
     {
+        _baseReferences = [.. (baseReferences ?? []).Where(x => x != null)];
+
         MefHostServices host = MefHostServices.Create(MefHostServices.DefaultAssemblies);
         _workspace = new AdhocWorkspace(host);
 
@@ -57,7 +61,7 @@ public sealed class RoslynCompletionSession
             "RDETerminalCompletion",
             "RDETerminalCompletion",
             LanguageNames.CSharp,
-            metadataReferences: DefaultReferences,
+            metadataReferences: MergeReferences(DefaultReferences.Concat(_baseReferences)),
             parseOptions: new Microsoft.CodeAnalysis.CSharp.CSharpParseOptions(
                 kind: SourceCodeKind.Script,
                 languageVersion: Microsoft.CodeAnalysis.CSharp.LanguageVersion.Latest),
@@ -77,6 +81,47 @@ public sealed class RoslynCompletionSession
 
         Document document = _workspace.AddDocument(scriptDocumentInfo);
         _documentId = document.Id;
+    }
+
+
+    public void ApplyReloadResult(UserScriptReloadResult result)
+    {
+        if (result == null || !result.Success)
+        {
+            return;
+        }
+
+        _workspaceLock.Wait();
+        try
+        {
+            Project project = _workspace.CurrentSolution.GetProject(_projectId);
+            if (project == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<MetadataReference> references = MergeReferences(
+                DefaultReferences
+                    .Concat(_baseReferences)
+                    .Concat(result.MetadataReference != null ? [result.MetadataReference] : Array.Empty<MetadataReference>()));
+
+            IReadOnlyList<string> imports = [.. DefaultImports
+                .Concat(result.ExportedNamespaces.Where(x => !string.IsNullOrWhiteSpace(x)))
+                .Distinct(StringComparer.Ordinal)];
+
+            var compilationOptions = ((Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions)project.CompilationOptions)
+                .WithUsings(imports);
+
+            var solution = _workspace.CurrentSolution
+                .WithProjectMetadataReferences(_projectId, references)
+                .WithProjectCompilationOptions(_projectId, compilationOptions);
+
+            _workspace.TryApplyChanges(solution);
+        }
+        finally
+        {
+            _workspaceLock.Release();
+        }
     }
 
     public async Task<IReadOnlyList<CompletionItem>> GetItemsAsync(
@@ -492,5 +537,25 @@ public sealed class RoslynCompletionSession
 
         sb.Append(")");
         return sb.ToString();
+    }
+
+    private static IReadOnlyList<MetadataReference> MergeReferences(IEnumerable<MetadataReference> references)
+    {
+        var merged = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (MetadataReference reference in references ?? [])
+        {
+            if (reference == null)
+            {
+                continue;
+            }
+
+            string key = reference.Display ?? reference.GetHashCode().ToString();
+            if (!merged.ContainsKey(key))
+            {
+                merged[key] = reference;
+            }
+        }
+        return [.. merged.Values];
     }
 }

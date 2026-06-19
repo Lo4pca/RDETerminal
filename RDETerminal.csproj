@@ -117,8 +117,15 @@
     <Copy SourceFiles="@(FilesToCopy)"
           DestinationFolder="$(PluginOutputDir)"
           SkipUnchangedFiles="true" />
-    
-    <ZipDirectory SourceDirectory="$(PluginOutputDir)" DestinationFile="$(ProjectName)_v$(Version).zip" Overwrite="true" />
+  </Target>
+
+  <Target Name="ZipPluginOutput" AfterTargets="CopyPluginToOutput" Condition="'$(Configuration)' == 'Release'">
+    <CreateProperty Value="$(AssemblyName)_v$(Version).zip">
+      <Output TaskParameter="Value" PropertyName="ZipOutputPath" />
+    </CreateProperty>
+    <ZipDirectory SourceDirectory="$(PluginOutputDir)" 
+                  DestinationFile="$(ZipOutputPath)" 
+                  Overwrite="true" />
   </Target>
 
 </Project>
