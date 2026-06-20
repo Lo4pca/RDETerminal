@@ -29,6 +29,7 @@ public sealed class RoslynScriptHost
             _options = BuildOptions(result);
             _state = null;
             _version++;
+            Plugin.LogInfo("[HotReload] session state was reset");
         }
     }
 

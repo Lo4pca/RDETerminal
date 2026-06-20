@@ -30,7 +30,7 @@ public sealed class NotebookKernel
         Completion = new RoslynCompletionSession(GetMetadataReferences());
     }
 
-    public void ApplyReloadResult(UserScriptReloadResult result)
+    public async Task ApplyReloadResult(UserScriptReloadResult result)
     {
         if (result == null || !result.Success)
         {
@@ -39,7 +39,7 @@ public sealed class NotebookKernel
 
         _hotReloadResult = result;
         _host.ApplyReloadResult(result);
-        Completion.ApplyReloadResult(result);
+        await Completion.ApplyReloadResult(result).ConfigureAwait(false);
     }
 
     public Task<NotebookCellResult> ExecuteAsync(string code)

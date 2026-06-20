@@ -19,6 +19,18 @@ public sealed class UserScriptCompiler
     private readonly CSharpParseOptions _parseOptions;
     private readonly CSharpCompilationOptions _compilationOptions;
 
+    /// <summary>
+    /// Caches resolved <see cref="MetadataReference"/>s for assemblies already
+    /// seen, keyed by assembly file location. AppDomain.GetAssemblies() is
+    /// scanned in full only once (here); subsequent <see cref="BuildReferences"/>
+    /// calls only resolve assemblies not already present in this cache,
+    /// which in practice is almost always zero during a hot-reload session.
+    /// </summary>
+    private readonly Dictionary<string, MetadataReference> _assemblyReferenceCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly object _cacheLock = new();
+
     public UserScriptCompiler(
         IEnumerable<string> defaultImports = null,
         IEnumerable<MetadataReference> extraReferences = null,
@@ -159,55 +171,12 @@ public sealed class UserScriptCompiler
             }
 
             string key = reference.Display ?? reference.GetHashCode().ToString();
-            if (!references.ContainsKey(key))
-            {
-                references[key] = reference;
-            }
+            if (!references.ContainsKey(key)) references.Add(key, reference);
         }
 
-        void AddAssemblyReference(Assembly asm)
+        foreach (MetadataReference cached in GetOrUpdateAssemblyReferenceCache())
         {
-            if (asm == null || asm.IsDynamic)
-            {
-                return;
-            }
-
-            string assemblyName;
-            try
-            {
-                assemblyName = asm.GetName().Name ?? string.Empty;
-            }
-            catch
-            {
-                return;
-            }
-
-            if (assemblyName.StartsWith(HotReloadAssemblyPrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            string location;
-            try
-            {
-                location = asm.Location;
-            }
-            catch
-            {
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(location))
-            {
-                return;
-            }
-
-            AddReference(MetadataReference.CreateFromFile(location));
-        }
-
-        foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            AddAssemblyReference(asm);
+            AddReference(cached);
         }
 
         foreach (MetadataReference reference in _extraReferences)
@@ -216,5 +185,78 @@ public sealed class UserScriptCompiler
         }
 
         return [.. references.Values];
+    }
+
+    /// <summary>
+    /// Returns cached <see cref="MetadataReference"/>s for all assemblies seen
+    /// so far, resolving only assemblies not already in the cache. The full
+    /// AppDomain.GetAssemblies() array is still enumerated every call (its
+    /// growth is bounded by total assemblies ever loaded), but the relatively
+    /// expensive per-assembly resolution (name/location reflection and
+    /// MetadataReference.CreateFromFile) only runs once per unique assembly
+    /// location, not once per reload.
+    /// </summary>
+    private IReadOnlyCollection<MetadataReference> GetOrUpdateAssemblyReferenceCache()
+    {
+        lock (_cacheLock)
+        {
+            foreach (Assembly asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                TryCacheAssemblyReference(asm);
+            }
+
+            // Snapshot while still holding the lock — Dictionary.Values is a
+            // live view and would throw if mutated by a concurrent Compile()
+            // call while the caller enumerates it outside this lock.
+            return [.. _assemblyReferenceCache.Values];
+        }
+    }
+
+    private void TryCacheAssemblyReference(Assembly asm)
+    {
+        if (asm == null || asm.IsDynamic)
+        {
+            return;
+        }
+
+        string location;
+        try
+        {
+            location = asm.Location;
+        }
+        catch
+        {
+            return;
+        }
+
+        // Dynamically-loaded assemblies (including our own hot-reloaded user
+        // script assemblies via Assembly.Load(byte[])) report an empty
+        // Location and are never resolvable as file-based references anyway.
+        if (string.IsNullOrWhiteSpace(location))
+        {
+            return;
+        }
+
+        if (_assemblyReferenceCache.ContainsKey(location))
+        {
+            return;
+        }
+
+        string assemblyName;
+        try
+        {
+            assemblyName = asm.GetName().Name ?? string.Empty;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (assemblyName.StartsWith(HotReloadAssemblyPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _assemblyReferenceCache[location] = MetadataReference.CreateFromFile(location);
     }
 }

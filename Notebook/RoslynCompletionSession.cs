@@ -84,14 +84,14 @@ public sealed class RoslynCompletionSession
     }
 
 
-    public void ApplyReloadResult(UserScriptReloadResult result)
+    public async Task ApplyReloadResult(UserScriptReloadResult result)
     {
         if (result == null || !result.Success)
         {
             return;
         }
 
-        _workspaceLock.Wait();
+        await _workspaceLock.WaitAsync().ConfigureAwait(false);
         try
         {
             Project project = _workspace.CurrentSolution.GetProject(_projectId);

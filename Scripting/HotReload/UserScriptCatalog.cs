@@ -94,9 +94,10 @@ public sealed class UserScriptCatalog
                         LastWriteTimeUtc = info.LastWriteTimeUtc
                     };
                 }
-                catch
+                catch (Exception ex)
                 {
-                    
+                    Plugin.LogWarn($"[HotReload] Failed to read script file: {path}");
+                    Plugin.LogWarn(ex.Message);
                 }
             }
         }

@@ -67,7 +67,7 @@ public static class TerminalBootstrap
         ReloadScripts(kernel);
     }
 
-    private static void ReloadScripts(NotebookKernel kernel)
+    private static async void ReloadScripts(NotebookKernel kernel)
     {
         if (_compiler == null || _catalog == null || kernel == null)
         {
@@ -78,7 +78,7 @@ public static class TerminalBootstrap
 
         if (result.Success)
         {
-            kernel.ApplyReloadResult(result);
+            await kernel.ApplyReloadResult(result).ConfigureAwait(false);
             Plugin.LogInfo("[HotReload] user scripts reloaded successfully.");
         }
         else
