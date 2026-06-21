@@ -11,12 +11,23 @@ namespace RDETerminal.UI;
 /// Creates and wires the terminal window. Called once from the Harmony postfix
 /// on scnEditor.Start(). Acts as the composition root for the terminal feature.
 /// </summary>
+/// <remarks>
+/// User script reloading is manual (triggered by the "Reload Scripts" button),
+/// not automatic on file save. <c>Assembly.Load(byte[])</c> — the only way to
+/// load a compiled user-script assembly under Unity's Mono runtime — cannot be
+/// unloaded; every reload permanently grows the process's resident assembly
+/// count. Automatic file-watching would silently trigger this cost on every
+/// save (including saves from format-on-save tooling). Manual reload puts the
+/// user in control of when that cost is paid. See the manual reload report
+/// for the full investigation of why this can't be made safe automatically
+/// on this runtime.
+/// </remarks>
 public static class TerminalBootstrap
 {
     private static TerminalWindow _window;
     private static UserScriptCatalog _catalog;
-    private static UserScriptWatcher _watcher;
     private static UserScriptCompiler _compiler;
+    private static NotebookKernel _kernel;
 
     public static void Ensure()
     {
@@ -28,17 +39,53 @@ public static class TerminalBootstrap
         ReflectionGameEventBridge eventBridge = new();
         EditorAdapter editorAdapter = new(eventBridge);
         IGameLevelBridge levelBridge = new GameLevelBridge(editorAdapter, eventBridge);
-        NotebookKernel kernel = new(editorAdapter, levelBridge);
+        _kernel = new NotebookKernel(editorAdapter, levelBridge);
 
-        InitializeHotReload(kernel);
+        InitializeUserScripts();
 
         GameObject go = new("RDETerminal");
         Object.DontDestroyOnLoad(go);
         _window = go.AddComponent<TerminalWindow>();
-        _window.Initialize(kernel);
+        _window.Initialize(_kernel);
     }
 
-    private static void InitializeHotReload(NotebookKernel kernel)
+    /// <summary>
+    /// Recompiles every .cs file in the Scripts folder and applies the result
+    /// to the running kernel and completion session. Called explicitly by the
+    /// "Reload Scripts" button — never automatically. Each call loads a new
+    /// assembly into the process that cannot be unloaded; calling this
+    /// repeatedly in a single session will grow memory usage over time. This
+    /// is an unavoidable platform limitation, not a bug — see the remarks on
+    /// this class for the full explanation.
+    /// </summary>
+    internal static async void ReloadUserScripts()
+    {
+        if (_compiler == null || _catalog == null || _kernel == null)
+        {
+            return;
+        }
+
+        Plugin.LogInfo("[ScriptReload] reloading user scripts...");
+
+        _catalog.Refresh();
+        UserScriptReloadResult result = _compiler.Compile(_catalog);
+
+        if (result.Success)
+        {
+            await _kernel.ApplyReloadResult(result).ConfigureAwait(false);
+            Plugin.LogInfo("[ScriptReload] user scripts reloaded successfully.");
+        }
+        else
+        {
+            Plugin.LogError("[ScriptReload] user scripts reload failed:");
+            if (!string.IsNullOrWhiteSpace(result.ErrorSummary))
+            {
+                Plugin.LogError(result.ErrorSummary);
+            }
+        }
+    }
+
+    private static void InitializeUserScripts()
     {
         string assemblyLocation = typeof(TerminalBootstrap).Assembly.Location;
         string rootDir = Path.GetDirectoryName(assemblyLocation) ?? Application.dataPath;
@@ -61,33 +108,8 @@ public static class TerminalBootstrap
                 "RDETerminal.Scripting"
             ]);
 
-        _watcher = new UserScriptWatcher(scriptsDir, _catalog);
-        _watcher.OnReloadRequested += () => ReloadScripts(kernel);
-
-        ReloadScripts(kernel);
-    }
-
-    private static async void ReloadScripts(NotebookKernel kernel)
-    {
-        if (_compiler == null || _catalog == null || kernel == null)
-        {
-            return;
-        }
-
-        UserScriptReloadResult result = _compiler.Compile(_catalog);
-
-        if (result.Success)
-        {
-            await kernel.ApplyReloadResult(result).ConfigureAwait(false);
-            Plugin.LogInfo("[HotReload] user scripts reloaded successfully.");
-        }
-        else
-        {
-            Plugin.LogError("[HotReload] user scripts reload failed:");
-            if (!string.IsNullOrWhiteSpace(result.ErrorSummary))
-            {
-                Plugin.LogError(result.ErrorSummary);
-            }
-        }
+        // Initial load happens once at startup, same as before — only the
+        // ongoing file-watching behavior is removed.
+        ReloadUserScripts();
     }
 }

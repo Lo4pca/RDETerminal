@@ -412,13 +412,14 @@ internal static class TerminalUiBuilder
         layout.childControlHeight = layout.childControlWidth = true;
         layout.childForceExpandHeight = layout.childForceExpandWidth = false;
 
-        Transform leftGroup  = MakeButtonGroup(row.transform, "LeftGroup",  TextAnchor.MiddleLeft);
+        Transform leftGroup  = MakeButtonGroup(row.transform, "LeftGroup",  TextAnchor.MiddleLeft,  60f);
         Transform spacer     = MakeSpacer(row.transform);
-        Transform rightGroup = MakeButtonGroup(row.transform, "RightGroup", TextAnchor.MiddleRight);
+        Transform rightGroup = MakeButtonGroup(row.transform, "RightGroup", TextAnchor.MiddleRight, 132f);
 
         _ = spacer; // used for layout only
 
-        CreateButton(leftGroup,  "Run",   60f, () => window.ExecuteCurrentCellPublic());
+        CreateButton(leftGroup, "Run", 60f, () => window.ExecuteCurrentCellPublic());
+        CreateButton(rightGroup, "Reload", 64f, () => window.ReloadUserScripts());
         CreateButton(rightGroup, "Reset", 60f, () => window.ResetKernel());
     }
 
@@ -502,17 +503,17 @@ internal static class TerminalUiBuilder
         return t;
     }
 
-    private static Transform MakeButtonGroup(Transform parent, string name, TextAnchor alignment)
+    private static Transform MakeButtonGroup(Transform parent, string name, TextAnchor alignment, float width)
     {
         GameObject go = new(name, typeof(RectTransform), typeof(LayoutElement), typeof(HorizontalLayoutGroup));
         go.transform.SetParent(parent, false);
 
         LayoutElement le = go.GetComponent<LayoutElement>();
-        le.preferredWidth = le.minWidth = 60f;
+        le.preferredWidth = le.minWidth = width;
         le.flexibleWidth = 0f;
 
         HorizontalLayoutGroup hg = go.GetComponent<HorizontalLayoutGroup>();
-        hg.spacing = 0f;
+        hg.spacing = 4f;
         hg.childAlignment = alignment;
         hg.childControlHeight = hg.childControlWidth = true;
         hg.childForceExpandHeight = hg.childForceExpandWidth = false;

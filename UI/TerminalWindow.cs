@@ -297,6 +297,18 @@ public sealed class TerminalWindow : MonoBehaviour
         FocusInput();
     }
 
+    /// <summary>
+    /// Called by the Reload button via TerminalUiBuilder. Recompiles the
+    /// Scripts folder and applies the result to the kernel and completion
+    /// session. See <see cref="TerminalBootstrap"/> remarks for why this is
+    /// a manual, explicit action rather than automatic on file save.
+    /// </summary>
+    internal void ReloadUserScripts()
+    {
+        TerminalBootstrap.ReloadUserScripts();
+        FocusInput();
+    }
+
     // ── Input helpers ─────────────────────────────────────────────────────────
 
     private void SetInputTextSilently(string value)
