@@ -27,7 +27,7 @@ public sealed class NotebookKernel
         _session = new NotebookSession();
         _globals = new ScriptGlobals(_session, adapter, levelBridge);
         _host = new RoslynScriptHost(ScriptImports.Create());
-        Completion = new RoslynCompletionSession(GetMetadataReferences());
+        Completion = new RoslynCompletionSession();
     }
 
     public async Task ApplyReloadResult(UserScriptReloadResult result)
@@ -61,35 +61,5 @@ public sealed class NotebookKernel
         _host.Reset();
         _session.ClearRuntimeState();
         _session.WorkingLevel = null;
-    }
-
-    private static IEnumerable<MetadataReference> GetMetadataReferences()
-    {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            if (assembly == null || assembly.IsDynamic)
-            {
-                continue;
-            }
-
-            string location;
-            try
-            {
-                location = assembly.Location;
-            }
-            catch
-            {
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(location) || !seen.Add(location))
-            {
-                continue;
-            }
-
-            yield return MetadataReference.CreateFromFile(location);
-        }
     }
 }

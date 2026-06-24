@@ -119,13 +119,23 @@
           SkipUnchangedFiles="true" />
   </Target>
 
-  <Target Name="ZipPluginOutput" AfterTargets="CopyPluginToOutput" Condition="'$(Configuration)' == 'Release'">
+    <Target Name="ZipPluginOutput" AfterTargets="CopyPluginToOutput" Condition="'$(Configuration)' == 'Release'">
+    <PropertyGroup>
+      <TempPackDir>$(IntermediateOutputPath)pack_temp\</TempPackDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(TempPackDir)" />
+    <ItemGroup>
+      <PackFiles Include="$(PluginOutputDir)\**\*.dll"/>
+    </ItemGroup>
+    <Copy SourceFiles="@(PackFiles)" 
+          DestinationFiles="@(PackFiles -> '$(TempPackDir)%(RecursiveDir)%(Filename)%(Extension)')" />
     <CreateProperty Value="$(AssemblyName)_v$(Version).zip">
       <Output TaskParameter="Value" PropertyName="ZipOutputPath" />
     </CreateProperty>
-    <ZipDirectory SourceDirectory="$(PluginOutputDir)" 
+    <ZipDirectory SourceDirectory="$(TempPackDir)" 
                   DestinationFile="$(ZipOutputPath)" 
                   Overwrite="true" />
+    <RemoveDir Directories="$(TempPackDir)" />
   </Target>
 
 </Project>

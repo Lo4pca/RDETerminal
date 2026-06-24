@@ -21,7 +21,6 @@ public sealed class RoslynCompletionSession
     private readonly AdhocWorkspace _workspace;
     private readonly ProjectId _projectId;
     private readonly DocumentId _documentId;
-    private readonly IReadOnlyList<MetadataReference> _baseReferences;
 
     /// <summary>
     /// Serialises all workspace mutations. AdhocWorkspace is not thread-safe,
@@ -35,7 +34,6 @@ public sealed class RoslynCompletionSession
             "System",
             "System.Linq",
             "System.Collections.Generic",
-            "RDLevelEditor",
             "RDETerminal.Domain",
             "RDETerminal.Domain.Core",
             "RDETerminal.Domain.Queries",
@@ -48,10 +46,8 @@ public sealed class RoslynCompletionSession
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(ScriptGlobals).Assembly.Location)
         ];
-    public RoslynCompletionSession(IEnumerable<MetadataReference> baseReferences)
+    public RoslynCompletionSession()
     {
-        _baseReferences = [.. (baseReferences ?? []).Where(x => x != null)];
-
         MefHostServices host = MefHostServices.Create(MefHostServices.DefaultAssemblies);
         _workspace = new AdhocWorkspace(host);
 
@@ -61,7 +57,7 @@ public sealed class RoslynCompletionSession
             "RDETerminalCompletion",
             "RDETerminalCompletion",
             LanguageNames.CSharp,
-            metadataReferences: MergeReferences(DefaultReferences.Concat(_baseReferences)),
+            metadataReferences: DefaultReferences,
             parseOptions: new Microsoft.CodeAnalysis.CSharp.CSharpParseOptions(
                 kind: SourceCodeKind.Script,
                 languageVersion: Microsoft.CodeAnalysis.CSharp.LanguageVersion.Latest),
@@ -102,7 +98,6 @@ public sealed class RoslynCompletionSession
 
             IReadOnlyList<MetadataReference> references = MergeReferences(
                 DefaultReferences
-                    .Concat(_baseReferences)
                     .Concat(result.MetadataReference != null ? [result.MetadataReference] : Array.Empty<MetadataReference>()));
 
             IReadOnlyList<string> imports = [.. DefaultImports

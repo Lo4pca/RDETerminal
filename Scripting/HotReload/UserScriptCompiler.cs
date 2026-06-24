@@ -131,17 +131,6 @@ public sealed class UserScriptCompiler
             sourceFiles);
     }
 
-    public bool TryCompile(
-        UserScriptCatalog catalog,
-        out Assembly assembly,
-        out ImmutableArray<Diagnostic> diagnostics)
-    {
-        UserScriptReloadResult result = Compile(catalog);
-        assembly = result.Assembly;
-        diagnostics = result.Diagnostics;
-        return result.Success;
-    }
-
     private SyntaxTree BuildPreludeTree()
     {
         if (_defaultImports.Count == 0)
