@@ -108,6 +108,7 @@ game.Apply(l);
   - 若调用前**有选中事件**，则从选中事件的位置开始向后排列新事件（忽略 `startY`）。
   - 否则从第 1 小节第 1 拍、纵坐标 `startY` 处开始排列。
   - 事件间隔 `spacing`（拍），分布在 `numTracks` 个轨道（纵坐标依次递增，循环使用）。
+- `ToggleDev()` - 控制是否开启调试模式。开启后，在游戏界面内输入`despacit0`即可打开/关闭调试界面
 
 #### 查询函数（`Domain.Queries.EventQueries`）
 
