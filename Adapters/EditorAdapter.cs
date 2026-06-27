@@ -167,6 +167,23 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISele
             skipSaveState);
     }
 
+    public void ToggleDev()
+    {
+        DevModeController.OverrideEnabled = true;
+        DevModeController.OverrideValue = !DevModeController.OverrideValue;
+    }
+
+    public void SetDev(bool value)
+    {
+        DevModeController.OverrideEnabled = true;
+        DevModeController.OverrideValue = value;
+    }
+
+    public void RestoreGameSetting()
+    {
+        DevModeController.OverrideEnabled = false;
+    }
+
     private void DeleteEventControl(LevelEventControl_Base eventControl, bool selectControlToTheLeft, bool sound = false)
     {
         Editor.DeleteEventControl(eventControl, selectControlToTheLeft, sound);

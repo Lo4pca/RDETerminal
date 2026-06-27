@@ -1,6 +1,5 @@
 .DS_Store
-exclude.txt
-keep.txt
+*.txt
 test*
 RDETerminal.sln
 bin
