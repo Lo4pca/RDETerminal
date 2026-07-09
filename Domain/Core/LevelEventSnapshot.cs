@@ -38,6 +38,14 @@ public sealed class LevelEventSnapshot(string type = null)
     {
         Action = SnapshotAction.Create;
         TargetTabName = targetTabName;
+        //Create类型snaphot调用链：GameLevelBridge.ApplyLevel->EditorAdapter.CreateEventFromSnapshot->ReflectionGameEventBridge.Apply
+        //对于新创建的事件来说，不存在_originalValues；若_originalValues不为空，说明该snapshot取自于某个事件，拷贝原始值以保证初始行为
+        //因此需要先将snapshot标记为Create再用Set设置属性，否则原始值将覆盖之前设置的内容
+        foreach (var pair in _originalValues)
+        {
+            Set(pair.Key,pair.Value);
+        }
+        MarkAllDirty();
     }
 
     public void MarkForDelete()
@@ -50,7 +58,7 @@ public sealed class LevelEventSnapshot(string type = null)
     {
         object cloned = SnapshotValueCloner.Clone(value);
         _values[key] = cloned;
-        _originalValues[key] = SnapshotValueCloner.Clone(cloned);
+        _originalValues[key] = SnapshotValueCloner.Clone(cloned); //保证两个字典引用不同的对象实例
     }
 
     public void Set(string key, object value)
@@ -87,6 +95,14 @@ public sealed class LevelEventSnapshot(string type = null)
         if (_dirtyKeys.Remove(key))
         {
             _dirtyOrder.Remove(key);
+        }
+    }
+
+    public void MarkAllDirty()
+    {
+        foreach (var pair in _values)
+        {
+            MarkDirty(pair.Key);
         }
     }
 
@@ -149,7 +165,7 @@ public sealed class LevelEventSnapshot(string type = null)
         }
     }
 
-    public double GetDouble(string key, double fallback = 0d)
+    public float GetFloat(string key, float fallback = 0f)
     {
         if (!_values.TryGetValue(key, out object value) || value == null)
         {
@@ -158,7 +174,7 @@ public sealed class LevelEventSnapshot(string type = null)
 
         try
         {
-            return Convert.ToDouble(value);
+            return Convert.ToSingle(value);
         }
         catch
         {

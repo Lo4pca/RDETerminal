@@ -126,7 +126,7 @@ game.Apply(l);
 |------|------|
 | `SetEventSpacingStartFrom(level, startBar, startBeat, spacing, filter)` | 对满足 `filter` 的事件重新设置时间位置，从 `(startBar, startBeat)` 开始，每个事件间隔 `spacing` 拍。 |
 
-**文本专用变换（`Text.FloatingTextTransforms`）**
+**Action类事件专用变换（`Action.FloatingTextTransforms`）**
 
 | 函数 | 说明 |
 |------|------|
@@ -134,6 +134,12 @@ game.Apply(l);
 | `RandomizeTextsAnglesPositions(level, minX, maxX, minY, maxY, filter, rng)` | 随机改变满足条件的 `FloatingText` 的显示角度和位置。 |
 | `SetTextFontSize(level, newSize, filter)` | 修改满足条件的 `FloatingText` 的字体大小。 |
 | `SetTextDuration(level, newDuration, filter)` | 修改满足条件的 `FloatingText` 的持续时长（淡出速率）。 |
+
+**Row类事件专用变换（`Row.BeatTransforms`）**
+
+| 函数 | 说明 | 注意事项 |
+|------|------|------|
+| `TransferBeatsFrom(level,fromRow,toRow,startBar,startBeat)` | 将`fromRow`上大于等于`(startBar,startBeat)`的拍子转移到`toRow`。 | 若`fromRow`与`toRow`位于同一房间，`fromRow`上已转移的拍子可能仍然显示在原本的轨道上，需重新加载关卡文件。
 
 > 所有变换函数均返回新的 `LevelDocument` 实例，原对象保持不变，便于链式调用。
 
@@ -209,7 +215,8 @@ public static class MyHelpers
 - **Queries** – 供脚本使用的过滤函数（如按类型、位置筛选）。  
 - **Transforms** – 供脚本使用的变换函数：  
   - `Common` – 通用事件变换。  
-  - `Text` – 专用于 `FloatingText` 事件的文本处理。  
+  - `Action` – 专用于 `Action` 类事件的变换。  
+  - `Row` - 专用于 `Row` 类事件的变换。  
 - `EventApi.cs` – 快捷获取当前选中事件。  
 - `EventSet.cs` – 批量操作多个事件快照。  
 - `VarApi.cs` – 管理脚本会话中的变量。

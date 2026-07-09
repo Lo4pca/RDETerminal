@@ -15,8 +15,8 @@ public static class EventQueries
         return evt != null && evt.GetInt(EventFieldNames.Bar) >= bar;
     }
 
-    public static bool BeatAtMost(LevelEventSnapshot evt, double beat)
+    public static bool BeatAtMost(LevelEventSnapshot evt, float beat)
     {
-        return evt != null && evt.GetDouble(EventFieldNames.Beat) <= beat;
+        return evt != null && evt.GetFloat(EventFieldNames.Beat) <= beat;
     }
 }
