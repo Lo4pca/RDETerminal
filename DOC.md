@@ -137,9 +137,9 @@ game.Apply(l);
 
 **Row类事件专用变换（`Row.BeatTransforms`）**
 
-| 函数 | 说明 | 注意事项 |
-|------|------|------|
-| `TransferBeatsFrom(level,fromRow,toRow,startBar,startBeat)` | 将`fromRow`上大于等于`(startBar,startBeat)`的拍子转移到`toRow`。 | 若`fromRow`与`toRow`位于同一房间，`fromRow`上已转移的拍子可能仍然显示在原本的轨道上，需重新加载关卡文件。
+| 函数 | 说明 |
+|------|------|
+| `TransferBeatsFrom(level,fromRow,toRow,startBar,startBeat)` | 将`fromRow`上大于等于`(startBar,startBeat)`的拍子转移到`toRow`。 |
 
 > 所有变换函数均返回新的 `LevelDocument` 实例，原对象保持不变，便于链式调用。
 

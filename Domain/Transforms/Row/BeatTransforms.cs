@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using RDETerminal.Domain.Core;
+using RDETerminal.Domain.Queries;
 
 namespace RDETerminal.Domain.Transforms.Row;
 
@@ -19,15 +20,20 @@ public static class BeatTransforms
 
         foreach (var evt in level.Events)
         {
-            if (evt.GetInt(EventFieldNames.Row)==fromRow&&evt.GetInt(EventFieldNames.Bar)>=startBar&&evt.GetFloat(EventFieldNames.Beat)>=startBeat)
+            if (EventQueries.IsEventInRowTab(evt)&&evt.GetInt(EventFieldNames.Row)==fromRow&&evt.GetInt(EventFieldNames.Bar)>=startBar&&evt.GetFloat(EventFieldNames.Beat)>=startBeat)
             {
-                evt.MarkForDelete();
+                //根据scnEditor.AddNewEventControl，位于"Rows"的事件挂载的parent transform取决于room id
+                //如果只修改Row属性，转移不处于同一房间的beat将会出错
+                //因此选择删除原有事件并创建新事件
                 var modified = evt.Clone();
+                var deleted = evt.Clone();
+                deleted.MarkForDelete();
                 modified.MarkForCreate("Rows");
                 modified.Set(EventFieldNames.Row, toRow);
                 newEvents.Add(modified);
+                newEvents.Add(deleted);
             }
-            newEvents.Add(evt);
+            else newEvents.Add(evt);
         }
 
         return new LevelDocument(newEvents);

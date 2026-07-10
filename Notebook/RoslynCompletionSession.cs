@@ -38,7 +38,8 @@ public sealed class RoslynCompletionSession
             "RDETerminal.Domain.Core",
             "RDETerminal.Domain.Queries",
             "RDETerminal.Domain.Transforms.Common",
-            "RDETerminal.Domain.Transforms.Text",
+            "RDETerminal.Domain.Transforms.Action",
+            "RDETerminal.Domain.Transforms.Row",
             "RDETerminal.Scripting"
         ];
     private static readonly IEnumerable<MetadataReference> DefaultReferences = 
