@@ -5,14 +5,14 @@ using RDETerminal.Domain.Core;
 using RDETerminal.Domain.Transforms.Common;
 using RDETerminal.Domain.Queries;
 
-namespace RDETerminal.Domain.Transforms.Text;
+namespace RDETerminal.Domain.Transforms.Action;
 
 public static class FloatingTextTransforms
 {
     public static LevelDocument SplitAndAdvanceTextsWithOffset(
         LevelDocument level,
         Func<LevelEventSnapshot, bool> filter,
-        double offset = 0.1)
+        float offset = 0.1f)
     {
         if (level == null) throw new ArgumentNullException(nameof(level));
 
@@ -31,7 +31,7 @@ public static class FloatingTextTransforms
 
                 int id = modified.GetInt(EventFieldNames.Id,-1);
                 int bar = modified.GetInt(EventFieldNames.Bar);
-                double beat = modified.GetDouble(EventFieldNames.Beat);
+                double beat = modified.GetFloat(EventFieldNames.Beat);
                 int y = modified.GetInt(EventFieldNames.Y);
 
                 int numSyllables = CountChar(modifiedText, '/');

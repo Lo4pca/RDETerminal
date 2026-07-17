@@ -5,6 +5,7 @@ public static class EventFieldNames
     public const string Type = "type";
     public const string Bar = "bar";
     public const string Beat = "beat";
+    public const string BarAndBeat = "barAndBeat";
     public const string Y = "y";
     public const string Rooms = "rooms";
     public const string Row = "row";

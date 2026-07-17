@@ -3,6 +3,8 @@ namespace RDETerminal.Domain.Core;
 public static class EventTypeNames
 {
     public const string AddClassicBeat = "AddClassicBeat";
+    public const string AddFreeTimeBeat = "AddFreeTimeBeat";
+    public const string AddOneshotBeat = "AddOneshotBeat";
     public const string AdvanceText = "AdvanceText";
     public const string BassDrop = "BassDrop";
     public const string Blend = "Blend";
@@ -33,6 +35,7 @@ public static class EventTypeNames
     public const string PlaySong = "PlaySong";
     public const string PlaySound = "PlaySound";
     public const string PulseCamera = "PulseCamera";
+    public const string PulseFreeTimeBeat = "PulseFreeTimeBeat";
     public const string ReadNarration = "ReadNarration";
     public const string RenameWindow = "RenameWindow";
     public const string ReorderRooms = "ReorderRooms";
@@ -55,6 +58,7 @@ public static class EventTypeNames
     public const string SetPlayStyle = "SetPlayStyle";
     public const string SetRoomContentMode = "SetRoomContentMode";
     public const string SetRoomPerspective = "SetRoomPerspective";
+    public const string SetRowXs = "SetRowXs";
     public const string SetSpeed = "SetSpeed";
     public const string SetTheme = "SetTheme";
     public const string SetVFXPreset = "SetVFXPreset";

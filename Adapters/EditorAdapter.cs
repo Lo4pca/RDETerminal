@@ -184,11 +184,6 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISele
         DevModeController.OverrideEnabled = false;
     }
 
-    private void DeleteEventControl(LevelEventControl_Base eventControl, bool selectControlToTheLeft, bool sound = false)
-    {
-        Editor.DeleteEventControl(eventControl, selectControlToTheLeft, sound);
-    }
-
     private LevelEventControl_Base CreateEvent(
         LevelEvent_Base levelEvent,
         Tab tab,

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.Tracing;
 using RDETerminal.Domain.Core;
 
 namespace RDETerminal.Domain.Queries;
@@ -15,8 +16,16 @@ public static class EventQueries
         return evt != null && evt.GetInt(EventFieldNames.Bar) >= bar;
     }
 
-    public static bool BeatAtMost(LevelEventSnapshot evt, double beat)
+    public static bool BeatAtMost(LevelEventSnapshot evt, float beat)
     {
-        return evt != null && evt.GetDouble(EventFieldNames.Beat) <= beat;
+        return evt != null && evt.GetFloat(EventFieldNames.Beat) <= beat;
+    }
+    public static bool IsEventInRowTab(LevelEventSnapshot evt)
+    {
+        return evt != null && (TypeIs(evt,EventTypeNames.AddOneshotBeat)||
+                               TypeIs(evt,EventTypeNames.AddClassicBeat)||
+                               TypeIs(evt,EventTypeNames.AddFreeTimeBeat)||
+                               TypeIs(evt,EventTypeNames.PulseFreeTimeBeat)||
+                               TypeIs(evt,EventTypeNames.SetRowXs));
     }
 }
