@@ -38,9 +38,9 @@ public sealed class LevelEventSnapshot(string type = null)
     {
         Action = SnapshotAction.Create;
         TargetTabName = targetTabName;
-        //Create类型snaphot调用链：GameLevelBridge.ApplyLevel->EditorAdapter.CreateEventFromSnapshot->ReflectionGameEventBridge.Apply
-        //对于新创建的事件来说，不存在_originalValues；若_originalValues不为空，说明该snapshot取自于某个事件，拷贝原始值以保证初始行为
-        //因此需要先将snapshot标记为Create再用Set设置属性，否则原始值将覆盖之前设置的内容
+        //Create type snaphot call chain: GameLevelBridge.ApplyLevel->EditorAdapter.CreateEventFromSnapshot->ReflectionGameEventBridge.Apply
+        //For freshly created events, _originalValues doesn't exist; if _originalValues is not empty, it means this snapshot is taken from some events, copy original values to ensure original behaviors
+        //So we need to mark this snapshot to Create then use Set to set attributes, otherwise original values will erase previously setted values
         foreach (var pair in _originalValues)
         {
             Set(pair.Key,pair.Value);

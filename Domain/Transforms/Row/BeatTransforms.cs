@@ -22,9 +22,9 @@ public static class BeatTransforms
         {
             if (EventQueries.IsEventInRowTab(evt)&&evt.GetInt(EventFieldNames.Row)==fromRow&&evt.GetInt(EventFieldNames.Bar)>=startBar&&evt.GetFloat(EventFieldNames.Beat)>=startBeat)
             {
-                //根据scnEditor.AddNewEventControl，位于"Rows"的事件挂载的parent transform取决于room id
-                //如果只修改Row属性，转移不处于同一房间的beat将会出错
-                //因此选择删除原有事件并创建新事件
+                //According to scnEditor.AddNewEventControl, parent transform which events in "Rows" attached to depends on room id
+                //If we only modify Row field, transferring beats that aren't in the same room will error
+                //So we choose to delete original events and create new events
                 var modified = evt.Clone();
                 var deleted = evt.Clone();
                 deleted.MarkForDelete();

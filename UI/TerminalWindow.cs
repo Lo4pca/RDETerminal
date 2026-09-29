@@ -278,15 +278,25 @@ public sealed class TerminalWindow : MonoBehaviour
         _completion.Hide();
         SetInputTextSilently(string.Empty);
         _history.ResetCursor();
-
-        NotebookCellResult result = await _kernel.ExecuteAsync(code);
-        if (!result.Success)
+        try
         {
-            Plugin.LogError(result.Error);
-        }
+            // Long-running commands such as await editor.RecordTaps() should not
+            // keep the terminal InputField focused while Space/other keys are
+            // being used for recording.
+            _inputField.DeactivateInputField();
 
-        _transcript?.Refresh();
-        FocusInput();
+            NotebookCellResult result = await _kernel.ExecuteAsync(code);
+            if (!result.Success)
+            {
+                Plugin.LogError(result.Error);
+            }
+
+            _transcript?.Refresh();
+        }
+        finally
+        {
+            FocusInput();
+        }
     }
 
     /// <summary>Called by the Reset button via TerminalUiBuilder.</summary>

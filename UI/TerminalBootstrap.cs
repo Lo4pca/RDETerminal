@@ -36,15 +36,21 @@ public static class TerminalBootstrap
             return;
         }
 
+        GameObject go = new("RDETerminal");
+        Object.DontDestroyOnLoad(go);
+
         ReflectionGameEventBridge eventBridge = new();
         EditorAdapter editorAdapter = new(eventBridge);
         IGameLevelBridge levelBridge = new GameLevelBridge(editorAdapter, eventBridge);
         _kernel = new NotebookKernel(editorAdapter, levelBridge);
 
+        EditorPositionSource positionSource = new();
+        TapSequenceRecorder recorder = go.AddComponent<TapSequenceRecorder>();
+        recorder.Initialize(editorAdapter, positionSource);
+        editorAdapter.AttachTapRecorder(recorder);
+
         InitializeUserScripts();
 
-        GameObject go = new("RDETerminal");
-        Object.DontDestroyOnLoad(go);
         _window = go.AddComponent<TerminalWindow>();
         _window.Initialize(_kernel);
     }

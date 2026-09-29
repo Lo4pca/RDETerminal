@@ -1,15 +1,19 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using RDETerminal.Domain;
 using RDETerminal.Domain.Abstractions;
 using RDETerminal.Domain.Core;
 using RDLevelEditor;
+using UnityEngine;
 
 namespace RDETerminal.Adapters;
 
 public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISelectedEventsSource
 {
     private readonly ReflectionGameEventBridge _eventBridge = eventBridge ?? throw new ArgumentNullException(nameof(eventBridge));
+    private readonly EditorPositionSource _positionSource = new();
+    private TapSequenceRecorder _tapRecorder;
 
     /// <summary>
     /// Resolves the current <see cref="scnEditor"/> instance on every access.
@@ -19,6 +23,86 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISele
     private static scnEditor Editor =>
         scnEditor.instance ?? throw new InvalidOperationException(
             "scnEditor.instance is null. The editor scene is not active.");
+
+    /// <summary>
+    /// Hooks the runtime recorder created by TerminalBootstrap.
+    /// </summary>
+    internal void AttachTapRecorder(TapSequenceRecorder recorder)
+    {
+        _tapRecorder = recorder ?? throw new ArgumentNullException(nameof(recorder));
+    }
+
+    /// <summary>
+    /// Arms interactive tap recording and returns when the user presses the stop key.
+    /// The first tap is always time offset 0. If playback is stopped, the first tap starts
+    /// playback and timing begins when playback actually becomes active.
+    /// </summary>
+    public Task<TimeSequence> RecordTaps(KeyCode tapKey = KeyCode.Space, KeyCode stopKey = KeyCode.F12)
+    {
+        if (_tapRecorder == null)
+        {
+            throw new InvalidOperationException("Tap sequence recorder is not initialized.");
+        }
+
+        return _tapRecorder.RecordAsync(tapKey, stopKey);
+    }
+
+    internal bool IsPlaying => Editor.isPlaying;
+
+    internal double GetPlaybackTime() => _positionSource.GetPlaybackTime();
+
+    internal void StartPlaybackForRecording(bool allowReload)
+    {
+        scnEditor editor = Editor;
+
+        if (editor.isPlaying)
+        {
+            return;
+        }
+
+        scnGame game = scnEditor.gameInstance;
+
+        if (game == null)
+        {
+            if (allowReload)
+            {
+                editor.ReloadGameScene(
+                    playAsSoonItReloads: true,
+                    isNewlyOpenedFile: false);
+            }
+            return;
+        }
+
+        if (!game.levelFinishedLoading)
+        {
+            // Let the current reload finish. The recorder will call us again
+            // on a later frame, at which point the game can be started.
+            return;
+        }
+
+        if (game.started && game.paused)
+        {
+            game.TogglePauseGame();
+            return;
+        }
+
+        if (game.gameState == GameState.PreStart ||
+            game.gameState == GameState.SpacePressedPreStart)
+        {
+            editor.StartPlaying(1f);
+            return;
+        }
+
+        // Unexpected editor/game state. On the first request prefer a clean reload
+        // that starts automatically. Later frames wait for that reload to reach
+        // PreStart rather than issuing repeated reloads.
+        if (allowReload)
+        {
+            editor.ReloadGameScene(
+                playAsSoonItReloads: true,
+                isNewlyOpenedFile: false);
+        }
+    }
 
     public EventSet GetSelectedEvents()
     {

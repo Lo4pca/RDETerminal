@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.CodeAnalysis;
 using RDETerminal.Adapters;
 using RDETerminal.Domain.Abstractions;
 using RDETerminal.Scripting;
@@ -14,6 +12,7 @@ public sealed class NotebookKernel
     public RoslynCompletionSession Completion { get; }
 
     private readonly NotebookSession _session;
+    private readonly EditorAdapter _editorAdapter;
     private readonly ScriptGlobals _globals;
     private readonly RoslynScriptHost _host;
     private UserScriptReloadResult _hotReloadResult;
@@ -25,7 +24,8 @@ public sealed class NotebookKernel
     public NotebookKernel(EditorAdapter adapter, IGameLevelBridge levelBridge)
     {
         _session = new NotebookSession();
-        _globals = new ScriptGlobals(_session, adapter, levelBridge);
+        _editorAdapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
+        _globals = new ScriptGlobals(_session, _editorAdapter, levelBridge);
         _host = new RoslynScriptHost(ScriptImports.Create());
         Completion = new RoslynCompletionSession();
     }

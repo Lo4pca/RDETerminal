@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net47</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>RDETerminal</AssemblyName>
     <Product>RDETerminal</Product>
     <Version>0.0.1</Version>
@@ -119,7 +119,7 @@
           SkipUnchangedFiles="true" />
   </Target>
 
-    <Target Name="ZipPluginOutput" AfterTargets="CopyPluginToOutput" Condition="'$(Configuration)' == 'Release'">
+  <Target Name="ZipPluginOutput" AfterTargets="CopyPluginToOutput" Condition="'$(Configuration)' == 'Release'">
     <PropertyGroup>
       <TempPackDir>$(IntermediateOutputPath)pack_temp\</TempPackDir>
     </PropertyGroup>

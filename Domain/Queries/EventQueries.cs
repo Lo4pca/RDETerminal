@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics.Tracing;
 using RDETerminal.Domain.Core;
 
 namespace RDETerminal.Domain.Queries;
@@ -27,5 +26,9 @@ public static class EventQueries
                                TypeIs(evt,EventTypeNames.AddFreeTimeBeat)||
                                TypeIs(evt,EventTypeNames.PulseFreeTimeBeat)||
                                TypeIs(evt,EventTypeNames.SetRowXs));
+    }
+    public static bool AllEvents(LevelEventSnapshot _)
+    {
+        return true;
     }
 }
