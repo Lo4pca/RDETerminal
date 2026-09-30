@@ -31,7 +31,7 @@ public static class FloatingTextTransforms
 
                 int id = modified.GetInt(EventFieldNames.Id,-1);
                 int bar = modified.GetInt(EventFieldNames.Bar);
-                double beat = modified.GetFloat(EventFieldNames.Beat);
+                float beat = modified.GetFloat(EventFieldNames.Beat);
                 int y = modified.GetInt(EventFieldNames.Y);
 
                 int numSyllables = CountChar(modifiedText, '/');

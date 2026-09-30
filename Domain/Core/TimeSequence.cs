@@ -127,7 +127,7 @@ public sealed class TimeSequence
     /// Converts this time sequence to a beat-domain <see cref="Sequence"/>
     /// using the level's timing map and the requested sequence origin.
     /// </summary>
-    public Sequence ToSequence(LevelDocument level, int startBar, double startBeat)
+    public Sequence ToSequence(LevelDocument level, int startBar, float startBeat)
     {
         if (level == null) throw new ArgumentNullException(nameof(level));
 

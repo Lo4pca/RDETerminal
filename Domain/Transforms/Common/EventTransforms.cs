@@ -7,12 +7,12 @@ namespace RDETerminal.Domain.Transforms.Common;
 
 public static class EventTransforms
 {
-    public static void IncrementBarAndBeats(ref int bar, ref double beat, double num)
+    public static void IncrementBarAndBeats(ref int bar, ref float beat, float num)
     {
         beat += num;
-        while (beat >= 9d)
+        while (beat >= 9f)
         {
-            beat -= 8d;
+            beat -= 8f;
             bar += 1;
         }
     }
@@ -20,8 +20,8 @@ public static class EventTransforms
     public static LevelDocument SetEventSpacingStartFrom(
         LevelDocument level,
         int startBar,
-        double startBeat,
-        double spacing,
+        float startBeat,
+        float spacing,
         Func<LevelEventSnapshot, bool> filter=null)
     {
         return SetEventSpacingStartFrom(
@@ -40,7 +40,7 @@ public static class EventTransforms
     public static LevelDocument SetEventSpacingStartFrom(
         LevelDocument level,
         int startBar,
-        double startBeat,
+        float startBeat,
         Sequence sequence,
         Func<LevelEventSnapshot, bool> filter=null)
     {
@@ -49,7 +49,7 @@ public static class EventTransforms
         filter??=EventQueries.AllEvents;
 
         LevelTimingMap timing = LevelTimingMap.FromLevel(level);
-        double originAbsoluteBeat = timing.GetAbsoluteBeat(startBar, startBeat);
+        float originAbsoluteBeat = timing.GetAbsoluteBeat(startBar, startBeat);
 
         var newEvents = new List<LevelEventSnapshot>(level.Events.Count);
         int index = 0;
@@ -58,7 +58,7 @@ public static class EventTransforms
         {
             if (filter(evt))
             {
-                double offset = sequence.GetOffset(index);
+                float offset = sequence.GetOffset(index);
                 LevelTimingMap.BarBeatPosition target = timing.GetPosition(
                     originAbsoluteBeat + offset);
 
@@ -85,7 +85,7 @@ public static class EventTransforms
     public static LevelDocument SetEventSpacingStartFrom(
         LevelDocument level,
         int startBar,
-        double startBeat,
+        float startBeat,
         TimeSequence sequence,
         Func<LevelEventSnapshot, bool> filter=null)
     {
