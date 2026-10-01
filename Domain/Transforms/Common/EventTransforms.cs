@@ -7,16 +7,6 @@ namespace RDETerminal.Domain.Transforms.Common;
 
 public static class EventTransforms
 {
-    public static void IncrementBarAndBeats(ref int bar, ref float beat, float num)
-    {
-        beat += num;
-        while (beat >= 9f)
-        {
-            beat -= 8f;
-            bar += 1;
-        }
-    }
-
     public static LevelDocument SetEventSpacingStartFrom(
         LevelDocument level,
         int startBar,

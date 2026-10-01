@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using RDETerminal.Domain.Core;
-using RDETerminal.Domain.Transforms.Common;
 using RDETerminal.Domain.Queries;
 
 namespace RDETerminal.Domain.Transforms.Action;
@@ -18,6 +17,8 @@ public static class FloatingTextTransforms
 
         var floatingTextIds = new HashSet<int>();
         var newEvents = new List<LevelEventSnapshot>(level.Events.Count);
+        Sequence advanceSequence = Sequence.ConstantSpacing(offset);
+        LevelTimingMap timing = LevelTimingMap.FromLevel(level);
 
         foreach (var evt in level.Events)
         {
@@ -39,15 +40,19 @@ public static class FloatingTextTransforms
 
                 newEvents.Add(modified);
 
+                float originAbsoluteBeat = timing.GetAbsoluteBeat(bar, beat);
+
                 for (int i = 0; i < numSyllables; i++)
                 {
-                    EventTransforms.IncrementBarAndBeats(ref bar, ref beat, offset);
+                    float advanceOffset = advanceSequence.GetOffset(i + 1);
+                    LevelTimingMap.BarBeatPosition target = timing.GetPosition(
+                        originAbsoluteBeat + advanceOffset);
 
                     var advance = new LevelEventSnapshot(EventTypeNames.AdvanceText);
                     advance.MarkForCreate("Actions");
                     advance.Set(EventFieldNames.Id, modified.Get(EventFieldNames.Id));
-                    advance.Set(EventFieldNames.Bar, bar);
-                    advance.Set(EventFieldNames.Beat, beat);
+                    advance.Set(EventFieldNames.Bar, target.Bar);
+                    advance.Set(EventFieldNames.Beat, target.Beat);
                     advance.Set(EventFieldNames.Y, y);
 
                     newEvents.Add(advance);

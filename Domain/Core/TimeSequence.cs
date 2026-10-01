@@ -14,9 +14,9 @@ namespace RDETerminal.Domain.Core;
 /// </summary>
 public sealed class TimeSequence
 {
-    private readonly Func<int, double> _offsetAt;
+    private readonly Func<int, float> _offsetAt;
 
-    private TimeSequence(Func<int, double> offsetAt, int? count)
+    private TimeSequence(Func<int, float> offsetAt, int? count)
     {
         _offsetAt = offsetAt ?? throw new ArgumentNullException(nameof(offsetAt));
         Count = count;
@@ -29,10 +29,65 @@ public sealed class TimeSequence
     public int? Count { get; }
 
     /// <summary>
+    /// Returns a view of this sequence with the first <paramref name="count" />
+    /// elements discarded. Offsets are not rebased; the first remaining element
+    /// keeps its original elapsed-time offset.
+    /// </summary>
+    public TimeSequence Skip(int count)
+    {
+        if (count < 0)
+            throw new ArgumentOutOfRangeException(nameof(count));
+
+        if (count == 0)
+            return this;
+
+        int? remaining = Count.HasValue
+            ? Math.Max(0, Count.Value - count)
+            : null;
+
+        return new TimeSequence(
+            index => _offsetAt(checked(index + count)),
+            remaining);
+    }
+
+    /// <summary>
+    /// Returns a lazy view rebased so that the item at <paramref name="index" />
+    /// becomes the new sequence origin. Earlier items are discarded and the
+    /// selected item's elapsed-time offset becomes 0.
+    /// </summary>
+    public TimeSequence Rebase(int index)
+    {
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        if (Count.HasValue && index >= Count.Value)
+            throw new ArgumentOutOfRangeException(
+                nameof(index),
+                $"Time sequence contains only {Count.Value} offsets; index {index} was requested.");
+
+        int? remaining = Count.HasValue
+            ? Count.Value - index
+            : null;
+
+        var origin = new Lazy<float>(() => GetOffset(index));
+
+        return new TimeSequence(
+            itemIndex =>
+            {
+                float originOffset = origin.Value;
+                if (itemIndex == 0)
+                    return 0f;
+
+                return GetOffset(checked(index + itemIndex)) - originOffset;
+            },
+            remaining);
+    }
+
+    /// <summary>
     /// Gets the elapsed-time offset, in seconds, for the item at
     /// <paramref name="index" />.
     /// </summary>
-    public double GetOffset(int index)
+    public float GetOffset(int index)
     {
         if (index < 0)
             throw new ArgumentOutOfRangeException(nameof(index));
@@ -43,8 +98,8 @@ public sealed class TimeSequence
                 $"Time sequence contains only {Count.Value} offsets; index {index} was requested.");
         }
 
-        double offset = _offsetAt(index);
-        if (double.IsNaN(offset) || double.IsInfinity(offset))
+        float offset = _offsetAt(index);
+        if (float.IsNaN(offset) || float.IsInfinity(offset))
         {
             throw new InvalidOperationException(
                 $"Time sequence produced an invalid offset at index {index}: {offset}.");
@@ -57,7 +112,7 @@ public sealed class TimeSequence
     /// Creates a finite sequence from elapsed-time offsets in seconds.
     /// Example: [0, 0.5, 1.25, 2.0].
     /// </summary>
-    public static TimeSequence FromOffsets(IEnumerable<double> offsets)
+    public static TimeSequence FromOffsets(IEnumerable<float> offsets)
     {
         if (offsets == null) throw new ArgumentNullException(nameof(offsets));
 
@@ -68,17 +123,17 @@ public sealed class TimeSequence
     /// <summary>
     /// Creates a finite sequence from elapsed-time offsets in seconds.
     /// </summary>
-    public static TimeSequence FromOffsets(params double[] offsets)
+    public static TimeSequence FromOffsets(params float[] offsets)
     {
         if (offsets == null) throw new ArgumentNullException(nameof(offsets));
-        return FromOffsets((IEnumerable<double>)offsets);
+        return FromOffsets((IEnumerable<float>)offsets);
     }
 
     /// <summary>
     /// Creates an unbounded sequence from a function of the item index.
     /// The function returns elapsed seconds from the sequence origin.
     /// </summary>
-    public static TimeSequence Generate(Func<int, double> offsetAt)
+    public static TimeSequence Generate(Func<int, float> offsetAt)
     {
         if (offsetAt == null) throw new ArgumentNullException(nameof(offsetAt));
         return new TimeSequence(offsetAt, null);
@@ -88,7 +143,7 @@ public sealed class TimeSequence
     /// Creates an unbounded evenly-spaced time sequence:
     /// 0, spacing, 2*spacing, ...
     /// </summary>
-    public static TimeSequence ConstantSpacing(double spacing)
+    public static TimeSequence ConstantSpacing(float spacing)
     {
         if (spacing < 0d)
             throw new ArgumentOutOfRangeException(nameof(spacing), "spacing must be non-negative.");
@@ -100,14 +155,14 @@ public sealed class TimeSequence
     /// Creates elapsed-time offsets from intervals between consecutive items.
     /// Example intervals [0.5, 0.75, 1.0] become offsets [0, 0.5, 1.25, 2.25].
     /// </summary>
-    public static TimeSequence FromIntervals(IEnumerable<double> intervals)
+    public static TimeSequence FromIntervals(IEnumerable<float> intervals)
     {
         if (intervals == null) throw new ArgumentNullException(nameof(intervals));
 
-        var offsets = new List<double> { 0d };
-        double current = 0d;
+        var offsets = new List<float> { 0f };
+        float current = 0f;
 
-        foreach (double interval in intervals)
+        foreach (float interval in intervals)
         {
             if (interval < 0d)
             {

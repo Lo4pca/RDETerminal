@@ -27,9 +27,9 @@ public sealed class TapSequenceRecorder : MonoBehaviour
     private RecordingState _state;
     private KeyCode _tapKey;
     private KeyCode _stopKey;
-    private readonly List<double> _offsets = new();
+    private readonly List<float> _offsets = new();
     private TaskCompletionSource<TimeSequence> _completion;
-    private double _origin;
+    private float _origin;
 
     internal bool IsActive => _state != RecordingState.Idle;
 
@@ -59,7 +59,7 @@ public sealed class TapSequenceRecorder : MonoBehaviour
         _tapKey = tapKey;
         _stopKey = stopKey;
         _offsets.Clear();
-        _origin = 0d;
+        _origin = 0f;
         _completion = new TaskCompletionSource<TimeSequence>(TaskCreationOptions.RunContinuationsAsynchronously);
         _state = RecordingState.Armed;
 
@@ -153,14 +153,14 @@ public sealed class TapSequenceRecorder : MonoBehaviour
             return;
         }
 
-        double time = _positionSource.GetPlaybackTime();
-        double offset = time - _origin;
+        float time = _positionSource.GetPlaybackTime();
+        float offset = time - _origin;
 
         // Avoid a tiny negative caused by floating-point/read-order noise on the
         // first frame after playback starts.
-        if (offset < 0d && offset > -1e-6d)
+        if (offset < 0f && offset > -1e-6f)
         {
-            offset = 0d;
+            offset = 0f;
         }
 
         _offsets.Add(offset);
@@ -170,7 +170,7 @@ public sealed class TapSequenceRecorder : MonoBehaviour
     {
         _origin = _positionSource.GetPlaybackTime();
         _offsets.Clear();
-        _offsets.Add(0d);
+        _offsets.Add(0f);
         _state = RecordingState.Recording;
     }
 
@@ -207,7 +207,7 @@ public sealed class TapSequenceRecorder : MonoBehaviour
     {
         _state = RecordingState.Idle;
         _offsets.Clear();
-        _origin = 0d;
+        _origin = 0f;
         _completion = null;
         _tapKey = KeyCode.None;
         _stopKey = KeyCode.None;

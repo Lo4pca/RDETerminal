@@ -25,6 +25,61 @@ public sealed class Sequence
     public int? Count { get; }
 
     /// <summary>
+    /// Returns a view of this sequence with the first <paramref name="count" />
+    /// elements discarded. Offsets are not rebased; the first remaining element
+    /// keeps its original offset.
+    /// </summary>
+    public Sequence Skip(int count)
+    {
+        if (count < 0)
+            throw new ArgumentOutOfRangeException(nameof(count));
+
+        if (count == 0)
+            return this;
+
+        int? remaining = Count.HasValue
+            ? Math.Max(0, Count.Value - count)
+            : null;
+
+        return new Sequence(
+            index => _offsetAt(checked(index + count)),
+            remaining);
+    }
+
+    /// <summary>
+    /// Returns a lazy view rebased so that the item at <paramref name="index" />
+    /// becomes the new sequence origin. Earlier items are discarded and the
+    /// selected item's offset becomes 0.
+    /// </summary>
+    public Sequence Rebase(int index)
+    {
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(index));
+
+        if (Count.HasValue && index >= Count.Value)
+            throw new ArgumentOutOfRangeException(
+                nameof(index),
+                $"Sequence contains only {Count.Value} offsets; index {index} was requested.");
+
+        int? remaining = Count.HasValue
+            ? Count.Value - index
+            : null;
+
+        var origin = new Lazy<float>(() => GetOffset(index));
+
+        return new Sequence(
+            itemIndex =>
+            {
+                float originOffset = origin.Value;
+                if (itemIndex == 0)
+                    return 0f;
+
+                return GetOffset(checked(index + itemIndex)) - originOffset;
+            },
+            remaining);
+    }
+
+    /// <summary>
     /// Gets the offset for the item at <paramref name="index" />.
     /// </summary>
     public float GetOffset(int index)

@@ -9,10 +9,10 @@ namespace RDETerminal.Adapters;
 /// </summary>
 public sealed class EditorPositionSource
 {
-    public double GetPlaybackTime()
+    public float GetPlaybackTime()
     {
         scrConductor conductor = scrConductor.instance ?? throw new InvalidOperationException(
                 "scrConductor.instance is null. Playback time is unavailable.");
-        return conductor.visualPos;
+        return (float)conductor.visualPos;
     }
 }
