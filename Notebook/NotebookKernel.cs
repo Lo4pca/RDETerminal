@@ -27,7 +27,7 @@ public sealed class NotebookKernel
         _editorAdapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
         _globals = new ScriptGlobals(_session, _editorAdapter, levelBridge);
         _host = new RoslynScriptHost(ScriptImports.Create());
-        Completion = new RoslynCompletionSession();
+        Completion = new RoslynCompletionSession(_host.GetCommittedCells);
     }
 
     public async Task ApplyReloadResult(UserScriptReloadResult result)
