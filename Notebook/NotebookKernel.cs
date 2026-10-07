@@ -58,8 +58,16 @@ public sealed class NotebookKernel
 
     public void ResetExecutionState()
     {
+        // Count before resetting: these are the cells whose declarations are about to be lost.
+        int discardedCells = _host.GetCommittedCells().Count;
+
         _host.Reset();
         _session.ClearRuntimeState();
         _session.WorkingLevel = null;
+
+        _session.AddNotice(discardedCells == 0
+            ? "Kernel reset. There was no script state to discard."
+            : $"Kernel reset. Script state from {discardedCells} executed cell(s) was discarded; "
+              + "working level is cleared.");
     }
 }

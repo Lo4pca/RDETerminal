@@ -113,7 +113,49 @@ internal sealed class TerminalCompletionController
         }
 
         int version = ++RequestVersion;
+
+        if (!ShouldOfferCompletion(text))
+        {
+            // Nothing worth completing here (right after '{', '}', ')', a space or a
+            // line break). Close the list immediately instead of waiting for the async
+            // result: an open list owns the Enter key, so a stale one would swallow the
+            // line break the user just typed. Signature help still follows the text.
+            HideList();
+            _ = RefreshSignatureAsync();
+            return;
+        }
+
         _ = OnInputChangedAsync(text, version);
+    }
+
+    /// <summary>
+    /// The completion list is only offered while an identifier (or a member
+    /// access) is being typed, or right after a character that asks for a specific
+    /// list. Roslyn will happily return its entire symbol list for any other
+    /// position (an "explicit invoke"), which would pop up after every '}' or space.
+    /// </summary>
+    private bool ShouldOfferCompletion(string text)
+    {
+        // Empty input is handled (and the list hidden) by the async path.
+        if (_inputField == null || string.IsNullOrEmpty(text))
+        {
+            return true;
+        }
+
+        int caret = Mathf.Clamp(_inputField.caretPosition, 0, text.Length);
+        if (caret == 0)
+        {
+            return false;
+        }
+
+        char before = text[caret - 1];
+        if (char.IsLetterOrDigit(before) || before == '_' || before == '.')
+        {
+            return true;
+        }
+
+        // Characters after which Roslyn offers a specific list (arguments, values, ...).
+        return before == '(' || before == ',' || before == ':' || before == '=' || before == '[';
     }
 
     // ── Completion operations ─────────────────────────────────────────────────
@@ -148,6 +190,13 @@ internal sealed class TerminalCompletionController
 
     internal void Hide()
     {
+        HideList();
+        _signaturePanel?.SetActive(false);
+    }
+
+    /// <summary>Closes the completion list and its detail panel, leaving signature help alone.</summary>
+    private void HideList()
+    {
         IsVisible = false;
         _completionItems = [];
         _completionIndex = 0;
@@ -155,7 +204,6 @@ internal sealed class TerminalCompletionController
 
         _completionPanel?.SetActive(false);
         _completionDetailPanel?.SetActive(false);
-        _signaturePanel?.SetActive(false);
     }
 
     internal Task RefreshSignatureAsync()

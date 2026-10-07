@@ -10,6 +10,12 @@ public sealed class CommandHistory
 
     public int Count => _items.Count;
 
+    /// <summary>
+    /// True while the user has stepped back into history and has not yet
+    /// returned to the "new input" position past the newest entry.
+    /// </summary>
+    public bool IsBrowsing => _cursor >= 0 && _cursor < _items.Count;
+
     public void Add(string command)
     {
         if (string.IsNullOrWhiteSpace(command))
