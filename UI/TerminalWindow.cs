@@ -77,6 +77,19 @@ public sealed class TerminalWindow : MonoBehaviour
     // InputField handled this frame's arrow keys (it runs before this script).
     private string _lastInputText = string.Empty;
     private int _lastCaret;
+    // Whether the input field had focus at the end of the previous frame (see RecoverFromEscapeCancel).
+    private bool _inputWasFocused;
+    // Selection as of the end of the previous frame (anchor == focus when nothing is selected).
+    private int _lastSelAnchor;
+    private int _lastSelFocus;
+
+    // The game takes focus away from the input when Tab is pressed (see HandleTabKey), so
+    // focus is handed back once Tab is released. These describe the state to return to.
+    private bool _focusReturnPending;
+    private int _focusReturnAnchor;
+    private int _focusReturnFocus;
+    private bool _focusReturnCaretAtEnd;
+    private string _focusReturnText = string.Empty;
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
@@ -160,6 +173,12 @@ public sealed class TerminalWindow : MonoBehaviour
             ToggleVisible();
         }
 
+        // These have to run before the focus check below, because both Escape (Unity's
+        // "cancel edit") and Tab (a game hotkey) make the input field lose focus.
+        RecoverFromEscapeCancel();
+        ReturnFocusAfterTab();
+        if (HandleTabKey()) return;
+
         if (!_visible || _inputField == null || !_inputField.isFocused) return;
 
         // Ctrl+Enter runs the cell. OnValidateInput stops that same key press
@@ -173,9 +192,10 @@ public sealed class TerminalWindow : MonoBehaviour
         if (_completion.IsVisible)
         {
             // While the completion list is open it owns the arrow keys, Enter and
-            // Escape. (The list only opens while an identifier is being typed or
-            // after an explicit trigger character, so it does not swallow the
-            // Enter pressed after '{' or '}'. See TerminalCompletionController.)
+            // Escape (and Tab, see HandleTabKey). The list only opens while an
+            // identifier is being typed or after an explicit trigger character, so it
+            // does not swallow the Enter pressed after '{' or '}'. See
+            // TerminalCompletionController.
             if (Input.GetKeyDown(KeyCode.UpArrow))   { _completion.MoveSelection(-1); return; }
             if (Input.GetKeyDown(KeyCode.DownArrow)) { _completion.MoveSelection( 1); return; }
             if (EnterPressedThisFrame())             { _completion.Commit();          return; }
@@ -184,6 +204,11 @@ public sealed class TerminalWindow : MonoBehaviour
         else if (HandleHistoryKeys())
         {
             return; // the text was replaced by a history entry; nothing left to post-process
+        }
+
+        if (HandleIndentShortcuts())
+        {
+            return;
         }
 
         ApplyTypingRules();
@@ -197,12 +222,76 @@ public sealed class TerminalWindow : MonoBehaviour
         // tell where it was before the InputField moved it.
         _lastInputText = _inputField.text ?? string.Empty;
         _lastCaret = _inputField.caretPosition;
+        _inputWasFocused = _inputField.isFocused;
+
+        _lastSelAnchor = _inputField.selectionAnchorPosition;
+        _lastSelFocus = _inputField.selectionFocusPosition;
+    }
+
+    // ── Escape ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Unity's InputField treats Escape as "cancel editing": it reverts its text to
+    /// what it was when it gained focus (usually empty, so everything typed since is
+    /// lost) and drops focus. That is built-in InputField behavior (see
+    /// InputField.wasCanceled), it cannot be switched off, and it happens before
+    /// this script's Update runs. So undo it here: put back the text from before the
+    /// key press, close the completion list (what Escape is meant to do in the
+    /// terminal) and take focus again.
+    /// </summary>
+    private void RecoverFromEscapeCancel()
+    {
+        if (!_visible || _inputField == null) return;
+        if (!Input.GetKeyDown(KeyCode.Escape)) return;
+
+        // Only a cancel if the field had focus last frame and has lost it since.
+        if (!_inputWasFocused || _inputField.isFocused) return;
+
+        int caret = _lastCaret;
+
+        _completion.Hide();
+        SetInputText(_lastInputText, caret);
+        StartCoroutine(RefocusInput(caret, caret, caretAtEnd: false));
+    }
+
+    /// <summary>
+    /// Gives the input focus back and restores the selection. Focusing selects all
+    /// text, and the field does that in its own LateUpdate, so the selection is
+    /// restored a frame later.
+    /// </summary>
+    private IEnumerator RefocusInput(int anchor, int focus, bool caretAtEnd)
+    {
+        FocusInput();
+        yield return null;
+
+        if (_inputField == null || !_visible || !_inputField.isFocused) yield break;
+
+        int length = (_inputField.text ?? string.Empty).Length;
+        if (caretAtEnd)
+        {
+            anchor = length;
+            focus = length;
+        }
+
+        anchor = Mathf.Clamp(anchor, 0, length);
+        focus = Mathf.Clamp(focus, 0, length);
+
+        _inputField.caretPosition           = focus;
+        _inputField.selectionAnchorPosition = anchor;
+        _inputField.selectionFocusPosition  = focus;
+        _inputField.ForceLabelUpdate();
     }
 
     // ── Keyboard helpers ──────────────────────────────────────────────────────
 
     private static bool IsControlHeld() =>
         Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+
+    private static bool IsShiftHeld() =>
+        Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+
+    private static bool IsAltHeld() =>
+        Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
 
     private static bool EnterPressedThisFrame() =>
         Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
@@ -371,81 +460,214 @@ public sealed class TerminalWindow : MonoBehaviour
     /// Replaces the input text without re-triggering completion, and places the
     /// caret at <paramref name="caret"/> (end of text when null).
     /// </summary>
-    private void SetInputText(string value, int? caret)
+    /// <param name="cancelPendingCompletion">
+    /// Drop completion results that are still being computed. Pass false when the
+    /// text left of the caret is unchanged, so those results remain valid.
+    /// </param>
+    private void SetInputText(string value, int? caret, bool cancelPendingCompletion = true)
+    {
+        value ??= string.Empty;
+        int position = Mathf.Clamp(caret ?? value.Length, 0, value.Length);
+        SetInputSelection(value, position, position, cancelPendingCompletion);
+    }
+
+    /// <summary>
+    /// Like <see cref="SetInputText"/>, but selects [anchor, focus]; the caret is
+    /// at <paramref name="focus"/>. Equal values just place the caret.
+    /// </summary>
+    private void SetInputSelection(string value, int anchor, int focus, bool cancelPendingCompletion = true)
     {
         if (_inputField == null) return;
 
         value ??= string.Empty;
-        int position = Mathf.Clamp(caret ?? value.Length, 0, value.Length);
+        anchor = Mathf.Clamp(anchor, 0, value.Length);
+        focus = Mathf.Clamp(focus, 0, value.Length);
 
         _completion.SuppressInputChanged = true;
-        _completion.RequestVersion++;
+        if (cancelPendingCompletion)
+        {
+            _completion.RequestVersion++;
+        }
 
         _inputField.text = value;
-        _inputField.caretPosition           = position;
-        _inputField.selectionAnchorPosition = position;
-        _inputField.selectionFocusPosition  = position;
+        _inputField.caretPosition           = focus;
+        _inputField.selectionAnchorPosition = anchor;
+        _inputField.selectionFocusPosition  = focus;
+        _inputField.ForceLabelUpdate();   // redraw the selection highlight now
 
         _completion.SuppressInputChanged = false;
         _ = _completion.RefreshSignatureAsync();
     }
 
-    // ── Typing rules: auto-indent and brace matching ─────────────────────────
+    // ── Typing rules: auto-indent, bracket and quote matching, surround ──────
     // The InputField has already handled this frame's key presses by the time
     // Update runs. These rules look at what it just did and adjust the result.
 
     /// <summary>
-    /// Reacts only when exactly one character was just inserted at the caret
-    /// (compared with the snapshot from the end of the previous frame). That
-    /// is what typing looks like; pasting, history recall, completion commits
-    /// and deletions never match, so they are never altered.
+    /// Reacts only when exactly one character was just typed or deleted at the
+    /// caret, or typed over a selection (compared with the snapshot from the end
+    /// of the previous frame); pasting, history recall and completion commits
+    /// never match, so they are never altered. The rules themselves live in
+    /// <see cref="TerminalInputEditing"/>.
     /// </summary>
     private void ApplyTypingRules()
     {
         string text = _inputField.text ?? string.Empty;
         int caret = _inputField.caretPosition;
 
-        if (!TerminalInputEditing.TryGetInsertedChar(_lastInputText, _lastCaret, text, caret, out char typed))
+        if (!TerminalInputEditing.TryApplyTypingRules(
+                _lastInputText, _lastCaret,
+                Math.Min(_lastSelAnchor, _lastSelFocus), Math.Max(_lastSelAnchor, _lastSelFocus),
+                text, caret,
+                out string newText, out int newSelStart, out int newSelEnd))
         {
             return;
         }
 
-        string newText;
-        int newCaret;
-        bool changed;
+        // If nothing left of the caret changed (a closing bracket or quote was only added
+        // after it), completion results already being computed are still valid. Keeping
+        // them is what lets "(" still open its argument list after the ")" is auto-inserted.
+        bool leftContextUnchanged = newSelStart == newSelEnd
+                                    && newSelEnd == caret
+                                    && string.CompareOrdinal(text, 0, newText, 0, caret) == 0;
 
-        switch (typed)
-        {
-            case '\n':
-                changed = TerminalInputEditing.TryAutoIndentAfterNewline(text, caret, out newText, out newCaret);
-                break;
-
-            case '{':
-                changed = TerminalInputEditing.TryAutoCloseBrace(text, caret, out newText, out newCaret);
-                break;
-
-            case '}':
-                // Typing '}' in front of the brace that is already waiting there
-                // steps over it; otherwise a '}' that starts its line is dedented.
-                changed = TerminalInputEditing.TryTypeOverClosingBrace(text, caret, out newText, out newCaret)
-                          || TerminalInputEditing.TryDedentClosingBrace(text, caret, out newText, out newCaret);
-                break;
-
-            default:
-                return;
-        }
-
-        if (changed)
-        {
-            ApplyAutomaticEdit(newText, newCaret);
-        }
+        ApplyAutomaticEdit(newText, newSelStart, newSelEnd, keepCompletion: leftContextUnchanged);
     }
 
-    private void ApplyAutomaticEdit(string newText, int caret)
+    private void ApplyAutomaticEdit(string newText, int anchor, int focus, bool keepCompletion)
     {
-        // The edit invalidates any completion computed for the old text.
-        _completion.Hide();
-        SetInputText(newText, caret);
+        if (!keepCompletion)
+        {
+            // The edit invalidates any completion computed for the old text.
+            _completion.Hide();
+        }
+
+        SetInputSelection(newText, anchor, focus, cancelPendingCompletion: !keepCompletion);
+    }
+
+    // ── Tab and indentation ───────────────────────────────────────────────────
+    // Tab is also a game hotkey (hold it for the help panel), and the game takes keyboard
+    // focus away from the input field when it sees it. That happens before this script's
+    // Update runs, so Tab is handled ahead of the focus check, triggered by "the field had
+    // focus last frame", acting on last frame's snapshot, and focus is handed back once
+    // Tab is released (not before: the game may still be showing its help panel).
+
+    /// <summary>
+    /// Tab accepts the highlighted completion while the list is open; otherwise Tab
+    /// indents the current line or selected lines and Shift+Tab outdents them.
+    /// OnValidateInput discards the '\t' the InputField would otherwise insert.
+    /// </summary>
+    /// <returns>True when the key press was a Tab meant for the terminal.</returns>
+    private bool HandleTabKey()
+    {
+        if (!_visible || _inputField == null || !Input.GetKeyDown(KeyCode.Tab) || IsControlHeld())
+        {
+            return false;
+        }
+
+        // Only if the user was typing in the terminal; otherwise Tab belongs to the game.
+        if (!_inputWasFocused)
+        {
+            return false;
+        }
+
+        if (_completion.IsVisible && !IsShiftHeld())
+        {
+            AcceptCompletionThenReturnFocus();
+            return true;
+        }
+
+        (int anchor, int focus) = ApplyIndent(outdent: IsShiftHeld());
+        ScheduleFocusReturn(anchor, focus, caretAtEnd: false);
+        return true;
+    }
+
+    /// <summary>
+    /// Ctrl+] and Ctrl+[ indent and outdent (VS Code's shortcuts). Unlike Tab they
+    /// don't clash with the game. Ignored while Alt is held, because AltGr (Ctrl+Alt)
+    /// is how some keyboard layouts type these brackets.
+    /// </summary>
+    private bool HandleIndentShortcuts()
+    {
+        if (!IsControlHeld() || IsAltHeld()) return false;
+
+        bool indent = Input.GetKeyDown(KeyCode.RightBracket);
+        bool outdent = Input.GetKeyDown(KeyCode.LeftBracket);
+        if (!indent && !outdent) return false;
+
+        ApplyIndent(outdent);
+        return true;
+    }
+
+    /// <summary>Indents or outdents the touched lines and returns the selection afterwards.</summary>
+    private (int anchor, int focus) ApplyIndent(bool outdent)
+    {
+        // If the game already took focus, the field's own selection has been reset to
+        // the start, so use last frame's.
+        bool focused = _inputField.isFocused;
+        string text = focused ? (_inputField.text ?? string.Empty) : _lastInputText;
+        int anchor = focused ? _inputField.selectionAnchorPosition : _lastSelAnchor;
+        int focus = focused ? _inputField.selectionFocusPosition : _lastSelFocus;
+
+        if (TerminalInputEditing.TryIndentLines(
+                text, anchor, focus, outdent, out string newText, out int newStart, out int newEnd))
+        {
+            // Keep which end of the selection holds the caret.
+            bool forward = anchor <= focus;
+            anchor = forward ? newStart : newEnd;
+            focus = forward ? newEnd : newStart;
+            ApplyAutomaticEdit(newText, anchor, focus, keepCompletion: false);
+        }
+        else if (!focused && !string.Equals(_inputField.text, text, StringComparison.Ordinal))
+        {
+            // Nothing to indent, but losing focus changed the field's text: put it back.
+            SetInputSelection(text, anchor, focus);
+        }
+
+        return (anchor, focus);
+    }
+
+    private async void AcceptCompletionThenReturnFocus()
+    {
+        await _completion.CommitAsync();
+
+        // The accepted text is in place with the caret at its end.
+        ScheduleFocusReturn(0, 0, caretAtEnd: true);
+    }
+
+    private void ScheduleFocusReturn(int anchor, int focus, bool caretAtEnd)
+    {
+        _focusReturnPending = true;
+        _focusReturnAnchor = anchor;
+        _focusReturnFocus = focus;
+        _focusReturnCaretAtEnd = caretAtEnd;
+        _focusReturnText = _inputField != null ? (_inputField.text ?? string.Empty) : string.Empty;
+    }
+
+    /// <summary>Hands focus back to the input once Tab has been released.</summary>
+    private void ReturnFocusAfterTab()
+    {
+        if (!_focusReturnPending) return;
+
+        if (!_visible || _inputField == null)
+        {
+            _focusReturnPending = false;
+            return;
+        }
+
+        // Still held: the game may be showing its help panel, so don't fight it for focus yet.
+        if (Input.GetKey(KeyCode.Tab)) return;
+
+        _focusReturnPending = false;
+        if (_inputField.isFocused) return;
+
+        // Losing focus should not change the text, but if it did, put our version back.
+        if (!string.Equals(_inputField.text, _focusReturnText, StringComparison.Ordinal))
+        {
+            SetInputSelection(_focusReturnText, _focusReturnAnchor, _focusReturnFocus);
+        }
+
+        StartCoroutine(RefocusInput(_focusReturnAnchor, _focusReturnFocus, _focusReturnCaretAtEnd));
     }
 
     // ── History vs. caret movement ────────────────────────────────────────────

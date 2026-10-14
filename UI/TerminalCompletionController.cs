@@ -172,7 +172,16 @@ internal sealed class TerminalCompletionController
         _ = RefreshDetailPanelAsync();
     }
 
-    internal async void Commit()
+    internal void Commit()
+    {
+        _ = CommitAsync();
+    }
+
+    /// <summary>
+    /// Accepts the highlighted completion. Completes once the new text has been
+    /// put into the input, so callers can act on the final text.
+    /// </summary>
+    internal async Task CommitAsync()
     {
         if (!IsVisible || _completionItems.Count == 0 || _inputField == null)
         {
