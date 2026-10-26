@@ -20,4 +20,6 @@ public static class EventFieldNames
     public const string FadeOutRate = "fadeOutDuration";
     public const string TextPosition = "textPosition";
     public const string Id = "id";
+    public const string BeatsPerMinute = "beatsPerMinute";
+    public const string CrotchetsPerBar = "crotchetsPerBar";
 }

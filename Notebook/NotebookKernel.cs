@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.CodeAnalysis;
 using RDETerminal.Adapters;
 using RDETerminal.Domain.Abstractions;
 using RDETerminal.Scripting;
@@ -14,6 +12,7 @@ public sealed class NotebookKernel
     public RoslynCompletionSession Completion { get; }
 
     private readonly NotebookSession _session;
+    private readonly EditorAdapter _editorAdapter;
     private readonly ScriptGlobals _globals;
     private readonly RoslynScriptHost _host;
     private UserScriptReloadResult _hotReloadResult;
@@ -25,9 +24,10 @@ public sealed class NotebookKernel
     public NotebookKernel(EditorAdapter adapter, IGameLevelBridge levelBridge)
     {
         _session = new NotebookSession();
-        _globals = new ScriptGlobals(_session, adapter, levelBridge);
+        _editorAdapter = adapter ?? throw new ArgumentNullException(nameof(adapter));
+        _globals = new ScriptGlobals(_session, _editorAdapter, levelBridge);
         _host = new RoslynScriptHost(ScriptImports.Create());
-        Completion = new RoslynCompletionSession();
+        Completion = new RoslynCompletionSession(_host.GetCommittedCells);
     }
 
     public async Task ApplyReloadResult(UserScriptReloadResult result)
@@ -58,8 +58,16 @@ public sealed class NotebookKernel
 
     public void ResetExecutionState()
     {
+        // Count before resetting: these are the cells whose declarations are about to be lost.
+        int discardedCells = _host.GetCommittedCells().Count;
+
         _host.Reset();
         _session.ClearRuntimeState();
         _session.WorkingLevel = null;
+
+        _session.AddNotice(discardedCells == 0
+            ? "Kernel reset. There was no script state to discard."
+            : $"Kernel reset. Script state from {discardedCells} executed cell(s) was discarded; "
+              + "working level is cleared.");
     }
 }

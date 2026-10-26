@@ -10,7 +10,6 @@ namespace RDETerminal.Scripting;
 public sealed class ScriptGlobals
 {
     public readonly NotebookSession session;
-    public readonly VarApi vars;
     public readonly EventApi events;
     public readonly Func<EventSet> sel;
     public readonly GameApi game;
@@ -29,7 +28,6 @@ public sealed class ScriptGlobals
         IGameLevelBridge levelBridge)
     {
         this.session = session;
-        vars = new VarApi(session);
         events = new EventApi(adapter);
         sel = () => events.Sel();
         game = new GameApi(levelBridge, session);

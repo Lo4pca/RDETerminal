@@ -29,6 +29,33 @@ public sealed class RoslynCompletionSession
     /// blocking any thread while waiting.
     /// </summary>
     private readonly SemaphoreSlim _workspaceLock = new(1, 1);
+
+    /// <summary>
+    /// Supplies the code of every cell that has executed successfully in the
+    /// current session (see <c>RoslynScriptHost.GetCommittedCells</c>). The
+    /// completion document is "those cells + the text being typed", which is
+    /// what lets variables declared in earlier cells show up in completion.
+    /// Contract: each returned list must be an immutable snapshot (a new
+    /// instance whenever the contents change), because it is cached by
+    /// reference.
+    /// </summary>
+    private readonly Func<IReadOnlyList<string>> _committedCellsProvider;
+
+    // The fields below are only read or written while holding _workspaceLock.
+    private IReadOnlyList<string> _cachedCells;
+    private string _cachedContext = string.Empty;
+
+    /// <summary>
+    /// Context prefix that the most recent <see cref="GetItemsAsync"/> call was
+    /// computed against. <see cref="ApplyAsync"/> and
+    /// <see cref="GetCompletionDescriptionAsync"/> reuse it so that a completion
+    /// item is always interpreted against the same document it came from, even
+    /// if a cell finished executing in between.
+    /// </summary>
+    private string _itemsContext = string.Empty;
+
+    /// <summary>Full text currently stored in the workspace document.</summary>
+    private string _documentText = string.Empty;
     private static readonly IEnumerable<string> DefaultImports = 
         [
             "System",
@@ -47,8 +74,10 @@ public sealed class RoslynCompletionSession
             MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
             MetadataReference.CreateFromFile(typeof(ScriptGlobals).Assembly.Location)
         ];
-    public RoslynCompletionSession()
+    public RoslynCompletionSession(Func<IReadOnlyList<string>> committedCellsProvider = null)
     {
+        _committedCellsProvider = committedCellsProvider;
+
         MefHostServices host = MefHostServices.Create(MefHostServices.DefaultAssemblies);
         _workspace = new AdhocWorkspace(host);
 
@@ -133,7 +162,14 @@ public sealed class RoslynCompletionSession
         await _workspaceLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _workspace.TryApplyChanges(_workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
+            // Roslyn analyses "earlier cells + typed text" so variables declared in
+            // previous cells are in scope. All positions Roslyn sees are therefore
+            // shifted by the length of the context prefix.
+            string context = GetContextPrefix();
+            _itemsContext = context;
+            int offset = context.Length;
+            int caret = Mathf.Clamp(cursorPosition, 0, code.Length);
+            SetDocumentText(context + code);
 
             Document document = _workspace.CurrentSolution.GetDocument(_documentId);
             if (document == null)
@@ -149,7 +185,7 @@ public sealed class RoslynCompletionSession
 
             var results = await service.GetCompletionsAsync(
                 document,
-                cursorPosition,
+                caret + offset,
                 trigger: CreateTrigger(code, cursorPosition),
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -251,8 +287,10 @@ public sealed class RoslynCompletionSession
         await _workspaceLock.WaitAsync().ConfigureAwait(false);
         try
         {
-            _workspace.TryApplyChanges(
-                _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
+            // Use the context the item was produced against (see _itemsContext).
+            string context = _itemsContext;
+            int offset = context.Length;
+            SetDocumentText(context + code);
 
             Document document = _workspace.CurrentSolution.GetDocument(_documentId);
             if (document == null)
@@ -267,8 +305,23 @@ public sealed class RoslynCompletionSession
             }
 
             var change = await service.GetChangeAsync(document, item).ConfigureAwait(false);
-            SourceText updated = SourceText.From(code).WithChanges(change.TextChange);
-            return updated.ToString();
+
+            // The change is expressed against the full document (context + typed
+            // text). Translate it back onto the text the user actually typed.
+            TextChange documentChange = change.TextChange;
+            int start = documentChange.Span.Start - offset;
+            if (start < 0 || start + documentChange.Span.Length > code.Length)
+            {
+                // The edit touches the context prefix, not the user's text.
+                // Refuse rather than corrupt the input.
+                return code;
+            }
+
+            var userChange = new TextChange(
+                new TextSpan(start, documentChange.Span.Length),
+                documentChange.NewText);
+
+            return SourceText.From(code).WithChanges(userChange).ToString();
         }
         finally
         {
@@ -304,8 +357,7 @@ public sealed class RoslynCompletionSession
         await _workspaceLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _workspace.TryApplyChanges(
-                _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
+            SetDocumentText(_itemsContext + code);
 
             Document document = _workspace.CurrentSolution.GetDocument(_documentId);
             if (document == null)
@@ -352,8 +404,9 @@ public sealed class RoslynCompletionSession
         await _workspaceLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _workspace.TryApplyChanges(
-                _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(code)));
+            string context = GetContextPrefix();
+            int offset = context.Length;
+            SetDocumentText(context + code);
 
             Document document = _workspace.CurrentSolution.GetDocument(_documentId);
             if (document == null)
@@ -369,7 +422,13 @@ public sealed class RoslynCompletionSession
             }
 
             int caret = Mathf.Clamp(cursorPosition, 0, code.Length);
-            SyntaxNode node = root.FindToken(Math.Max(0, caret - 1)).Parent;
+            if (caret == 0)
+            {
+                return string.Empty;
+            }
+
+            // Document-relative position of the character before the caret.
+            SyntaxNode node = root.FindToken(offset + caret - 1).Parent;
             if (node == null)
             {
                 return string.Empty;
@@ -399,6 +458,16 @@ public sealed class RoslynCompletionSession
             if (method == null)
             {
                 return string.Empty;
+            }
+
+            // Translate the document-relative '(' position back into the typed text.
+            if (openParen >= 0)
+            {
+                openParen -= offset;
+                if (openParen < 0)
+                {
+                    return string.Empty;
+                }
             }
 
             int activeIndex = GetActiveParameterIndex(code, openParen, caret, method.Parameters.Length);
@@ -533,6 +602,85 @@ public sealed class RoslynCompletionSession
 
         sb.Append(")");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Returns the text that precedes the user's input in the completion
+    /// document: every successfully executed cell, in order. Must be called
+    /// while holding <c>_workspaceLock</c>.
+    /// </summary>
+    private string GetContextPrefix()
+    {
+        IReadOnlyList<string> cells = _committedCellsProvider?.Invoke();
+
+        if (cells == null || cells.Count == 0)
+        {
+            _cachedCells = null;
+            _cachedContext = string.Empty;
+            return string.Empty;
+        }
+
+        // Snapshots are immutable and replaced on change, so reference equality
+        // is a reliable "nothing changed since last time" check.
+        if (!ReferenceEquals(cells, _cachedCells))
+        {
+            _cachedContext = BuildContextPrefix(cells);
+            _cachedCells = cells;
+        }
+
+        return _cachedContext;
+    }
+
+    /// <summary>
+    /// Joins cells into one script. Each cell is terminated explicitly because
+    /// the scripting engine tolerates a missing final semicolon in a
+    /// submission, but a combined script does not. The terminator goes on its
+    /// own line so it can't be swallowed by a trailing // comment.
+    /// </summary>
+    private static string BuildContextPrefix(IReadOnlyList<string> cells)
+    {
+        var sb = new StringBuilder();
+
+        foreach (string cell in cells)
+        {
+            if (string.IsNullOrWhiteSpace(cell))
+            {
+                continue;
+            }
+
+            string trimmed = cell.TrimEnd();
+            sb.Append(trimmed);
+
+            if (trimmed[^1] != ';')
+            {
+                sb.Append("\n;");
+            }
+
+            sb.Append('\n');
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Replaces the workspace document's text, skipping the (expensive) reparse
+    /// and rebinding when the text hasn't changed. Completion, description and
+    /// signature requests for one keystroke all use identical text, so this
+    /// avoids analysing the whole session history several times per keystroke.
+    /// Must be called while holding <c>_workspaceLock</c>.
+    /// </summary>
+    private void SetDocumentText(string fullText)
+    {
+        if (string.Equals(fullText, _documentText, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (_workspace.TryApplyChanges(
+                _workspace.CurrentSolution.WithDocumentText(_documentId, SourceText.From(fullText))))
+        {
+            _documentText = fullText;
+        }
     }
 
     private static IReadOnlyList<MetadataReference> MergeReferences(IEnumerable<MetadataReference> references)

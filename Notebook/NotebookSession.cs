@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using RDETerminal.Domain.Core;
 
@@ -7,10 +6,15 @@ namespace RDETerminal.Notebook;
 public sealed class NotebookSession
 {
     private readonly List<string> _printed = [];
-    private readonly Dictionary<string, object> _variables =
-        new(StringComparer.OrdinalIgnoreCase);
-
+    private readonly List<NotebookNotice> _notices = [];
     public List<NotebookCell> Cells { get; } = [];
+
+    /// <summary>
+    /// System messages (such as "kernel reset") in chronological order. They
+    /// survive <see cref="ClearRuntimeState"/> because they are part of the
+    /// transcript, not of the runtime state.
+    /// </summary>
+    public IReadOnlyList<NotebookNotice> Notices => _notices;
 
     public LevelDocument WorkingLevel { get; set; }
 
@@ -33,42 +37,17 @@ public sealed class NotebookSession
         return text;
     }
 
-    // ── Variable store ────────────────────────────────────────────────────────
+    // ── Transcript notices ────────────────────────────────────────────────────
 
-    /// <summary>Names of all currently stored variables.</summary>
-    public IEnumerable<string> VariableNames => _variables.Keys;
-
-    /// <summary>Sets or replaces a variable by name.</summary>
-    public void Set(string name, object value)
+    /// <summary>Records a system message at the current position in the transcript.</summary>
+    public void AddNotice(string message)
     {
-        _variables[name] = value;
-    }
-
-    /// <summary>Tries to retrieve a variable by name.</summary>
-    public bool TryGet(string name, out object value)
-    {
-        return _variables.TryGetValue(name, out value);
-    }
-
-    /// <summary>
-    /// Returns a variable cast to <typeparamref name="T"/>.
-    /// Returns <c>default</c> when the name is not found or the value is null.
-    /// Uses <see cref="Convert.ChangeType"/> as a fallback when the stored
-    /// type is not directly assignable.
-    /// </summary>
-    public T Get<T>(string name)
-    {
-        if (!_variables.TryGetValue(name, out object value) || value == null)
+        if (string.IsNullOrWhiteSpace(message))
         {
-            return default;
+            return;
         }
 
-        if (value is T t)
-        {
-            return t;
-        }
-
-        return (T)Convert.ChangeType(value, typeof(T));
+        _notices.Add(new NotebookNotice(Cells.Count, message));
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -76,6 +55,5 @@ public sealed class NotebookSession
     public void ClearRuntimeState()
     {
         _printed.Clear();
-        _variables.Clear();
     }
 }

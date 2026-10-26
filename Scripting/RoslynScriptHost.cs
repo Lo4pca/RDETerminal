@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
@@ -16,10 +18,34 @@ public sealed class RoslynScriptHost
     private readonly object _sync = new();
     private int _version;
 
+    // Invariant: always exactly the cells that produced _state (in order).
+    // Only ever replaced wholesale (never mutated), and only under _sync.
+    private ImmutableList<string> _committedCells = ImmutableList<string>.Empty;
+
     public RoslynScriptHost(ScriptOptions options)
     {
         _baseOptions = options ?? ScriptOptions.Default;
         _options = _baseOptions;
+    }
+
+    /// <summary>
+    /// Code of every cell that has executed successfully since the last reset or
+    /// reload, in execution order. These cells are exactly what produced the
+    /// current script state, so anything that needs to know what is in scope
+    /// right now (e.g. completion) should read this instead of keeping its own
+    /// record.
+    /// </summary>
+    /// <remarks>
+    /// The returned list is an immutable snapshot: a new instance is created
+    /// whenever the contents change, so callers may use reference equality as a
+    /// cheap "has anything changed?" check. Safe to call from any thread.
+    /// </remarks>
+    public IReadOnlyList<string> GetCommittedCells()
+    {
+        lock (_sync)
+        {
+            return _committedCells;
+        }
     }
 
     public void ApplyReloadResult(UserScriptReloadResult result)
@@ -28,6 +54,7 @@ public sealed class RoslynScriptHost
         {
             _options = BuildOptions(result);
             _state = null;
+            _committedCells = ImmutableList<string>.Empty;
             _version++;
             Plugin.LogInfo("[HotReload] session state was reset");
         }
@@ -39,12 +66,14 @@ public sealed class RoslynScriptHost
         {
             ScriptOptions options;
             ScriptState<object> state;
+            ImmutableList<string> cells;
             int version;
 
             lock (_sync)
             {
                 options = _options;
                 state = _state;
+                cells = _committedCells;
                 version = _version;
             }
 
@@ -63,6 +92,11 @@ public sealed class RoslynScriptHost
                 if (version == _version)
                 {
                     _state = nextState;
+
+                    // Built from the snapshot taken together with `state` (not from
+                    // the live list) so this always describes the chain of cells that
+                    // produced `nextState`, even if two cells were in flight at once.
+                    _committedCells = cells.Add(code);
                 }
             }
 
@@ -100,6 +134,7 @@ public sealed class RoslynScriptHost
         lock (_sync)
         {
             _state = null;
+            _committedCells = ImmutableList<string>.Empty;
             _version++;
         }
     }

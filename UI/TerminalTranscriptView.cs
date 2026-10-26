@@ -77,11 +77,27 @@ internal sealed class TerminalTranscriptView
             return "(kernel not ready)";
         }
 
+        NotebookSession session = _kernel.Session;
         StringBuilder sb = new();
+        int nextNotice = 0;
 
-        for (int i = 0; i < _kernel.Session.Cells.Count; i++)
+        // Notices are recorded in chronological order, so a single forward pass
+        // interleaves them with the cells they followed.
+        for (int i = 0; i <= session.Cells.Count; i++)
         {
-            NotebookCell cell = _kernel.Session.Cells[i];
+            while (nextNotice < session.Notices.Count && session.Notices[nextNotice].AfterCellCount <= i)
+            {
+                sb.AppendLine("-- " + session.Notices[nextNotice].Message + " --");
+                sb.AppendLine();
+                nextNotice++;
+            }
+
+            if (i == session.Cells.Count)
+            {
+                break;
+            }
+
+            NotebookCell cell = session.Cells[i];
             sb.AppendLine("In [" + (i + 1) + "]");
             sb.AppendLine(cell.Code);
             sb.AppendLine("Out:");
