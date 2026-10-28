@@ -356,7 +356,7 @@ public sealed class EditorAdapter(ReflectionGameEventBridge eventBridge) : ISele
         bool selectLastCreatedControl,
         bool skipSaveState)
     {
-        List<LevelEventControl_Base> created = new(number);
+        List<LevelEventControl_Base> created = [with(number)];
 
         for (int i = 0; i < number; i++)
         {

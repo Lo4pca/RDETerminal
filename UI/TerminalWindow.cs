@@ -91,6 +91,14 @@ public sealed class TerminalWindow : MonoBehaviour
     private bool _focusReturnCaretAtEnd;
     private string _focusReturnText = string.Empty;
 
+    // Undo / redo (see RecordUndoStep).
+    private readonly TerminalUndoHistory _undo = new();
+    private EditKind _pendingEditKind;   // what kind of edit this frame's typing was
+    private char _pendingTypedChar;
+    private bool _programmaticEdit;      // code set the text this frame (it was not typed)
+    private bool _skipUndoRecord;        // this frame's change is an undo/redo or a cleared input
+    private bool _applyingText;          // true while the field's text is being set from code
+
     // ── Unity lifecycle ───────────────────────────────────────────────────────
 
     private void Awake()
@@ -206,6 +214,11 @@ public sealed class TerminalWindow : MonoBehaviour
             return; // the text was replaced by a history entry; nothing left to post-process
         }
 
+        if (HandleUndoRedoKeys())
+        {
+            return;
+        }
+
         if (HandleIndentShortcuts())
         {
             return;
@@ -217,6 +230,10 @@ public sealed class TerminalWindow : MonoBehaviour
     private void LateUpdate()
     {
         if (!_editorSceneActive || _inputField == null) return;
+
+        // Record what changed this frame for undo/redo. This compares against last frame's
+        // snapshot, so it has to run before the snapshot is refreshed below.
+        RecordUndoStep();
 
         // Remember where the caret is now, so next frame's arrow-key handling can
         // tell where it was before the InputField moved it.
@@ -307,9 +324,21 @@ public sealed class TerminalWindow : MonoBehaviour
     /// </summary>
     private char OnValidateInput(string text, int charIndex, char addedChar)
     {
-        if ((addedChar == '\n' || addedChar == '\r') && IsControlHeld() && EnterKeyActive())
+        // Setting the field's text from code replays every character through here, so the key
+        // chords below must only filter what the user types, not text that code is applying.
+        if (!_applyingText)
         {
-            return '\0';
+            if ((addedChar == '\n' || addedChar == '\r') && IsControlHeld() && EnterKeyActive())
+            {
+                return '\0';
+            }
+
+            // Ctrl+Z / Ctrl+Y are undo and redo (HandleUndoRedoKeys); the key press must not
+            // also type a letter.
+            if (IsControlHeld() && !IsAltHeld() && (Input.GetKey(KeyCode.Z) || Input.GetKey(KeyCode.Y)))
+            {
+                return '\0';
+            }
         }
 
         return _completion.OnValidateInput(text, charIndex, addedChar);
@@ -347,6 +376,17 @@ public sealed class TerminalWindow : MonoBehaviour
             result.SignatureText);
 
         _transcript.Refresh();
+
+        // A fresh input field: forget the old one's snapshot and undo history.
+        _lastInputText = string.Empty;
+        _lastCaret = 0;
+        _lastSelAnchor = 0;
+        _lastSelFocus = 0;
+        _undo.Clear();
+        _pendingEditKind = EditKind.Other;
+        _pendingTypedChar = '\0';
+        _programmaticEdit = false;
+        _skipUndoRecord = false;
     }
 
     private void DestroyNativeUi()
@@ -410,6 +450,8 @@ public sealed class TerminalWindow : MonoBehaviour
         _draft = string.Empty;
         _completion.Hide();
         SetInputTextSilently(string.Empty);
+        _undo.Clear();               // the input starts over; there is nothing to undo into
+        _skipUndoRecord = true;
         _history.ResetCursor();
         try
         {
@@ -489,7 +531,17 @@ public sealed class TerminalWindow : MonoBehaviour
             _completion.RequestVersion++;
         }
 
-        _inputField.text = value;
+        _programmaticEdit = true;
+        _applyingText = true;
+        try
+        {
+            _inputField.text = value;   // replays every character through OnValidateInput
+        }
+        finally
+        {
+            _applyingText = false;
+        }
+
         _inputField.caretPosition           = focus;
         _inputField.selectionAnchorPosition = anchor;
         _inputField.selectionFocusPosition  = focus;
@@ -512,8 +564,19 @@ public sealed class TerminalWindow : MonoBehaviour
     /// </summary>
     private void ApplyTypingRules()
     {
+        // Text that code set this frame (a completion, history recall, undo, ...) was not typed
+        // by the user, so the typing rules must not touch it. It is an undo step of its own.
+        if (_programmaticEdit)
+        {
+            return;
+        }
+
         string text = _inputField.text ?? string.Empty;
         int caret = _inputField.caretPosition;
+
+        // Tell the undo history what kind of edit this was: typing and deleting runs merge into one step.
+        _pendingEditKind = TerminalInputEditing.ClassifyEdit(
+            _lastInputText, _lastCaret, text, caret, out _pendingTypedChar);
 
         if (!TerminalInputEditing.TryApplyTypingRules(
                 _lastInputText, _lastCaret,
@@ -668,6 +731,81 @@ public sealed class TerminalWindow : MonoBehaviour
         }
 
         StartCoroutine(RefocusInput(_focusReturnAnchor, _focusReturnFocus, _focusReturnCaretAtEnd));
+    }
+
+    // ── Undo / redo ───────────────────────────────────────────────────────────
+    // The legacy InputField has no undo. Every change to the text is recorded at the end of
+    // the frame by comparing it with the previous frame's snapshot, so typing, deleting,
+    // pasting, completions, indents and history recall are all covered without hooking each
+    // one. Only runs of typed or deleted characters are merged into one step; see
+    // TerminalUndoHistory for the grouping rules.
+
+    private void RecordUndoStep()
+    {
+        EditKind kind = _pendingEditKind;
+        char typed = _pendingTypedChar;
+        _pendingEditKind = EditKind.Other;
+        _pendingTypedChar = '\0';
+        _programmaticEdit = false;
+
+        if (_skipUndoRecord)
+        {
+            // An undo/redo (or clearing the input) already accounts for this frame's change.
+            _skipUndoRecord = false;
+            return;
+        }
+
+        string text = _inputField.text ?? string.Empty;
+        UndoState after = new(text, _inputField.selectionAnchorPosition, _inputField.selectionFocusPosition);
+
+        if (string.Equals(text, _lastInputText, StringComparison.Ordinal))
+        {
+            // Typing a closing bracket or quote over an auto-inserted one changes nothing but the
+            // caret; keep the typing run contiguous.
+            if (kind == EditKind.Typing)
+            {
+                _undo.NoteTypedOver(after, typed, Time.unscaledTime);
+            }
+
+            return;
+        }
+
+        _undo.Record(
+            new UndoState(_lastInputText, _lastSelAnchor, _lastSelFocus),
+            after, kind, typed, Time.unscaledTime);
+    }
+
+    /// <summary>Ctrl+Z undoes; Ctrl+Y and Ctrl+Shift+Z redo.</summary>
+    /// <returns>True when the key press was an undo/redo chord (consumed even if there was nothing to do).</returns>
+    private bool HandleUndoRedoKeys()
+    {
+        // Alt held means AltGr on many keyboard layouts.
+        if (!IsControlHeld() || IsAltHeld()) return false;
+
+        bool z = Input.GetKeyDown(KeyCode.Z);
+        bool y = Input.GetKeyDown(KeyCode.Y);
+        if (!z && !y) return false;
+
+        bool redo = y || IsShiftHeld();
+
+        if (redo ? _undo.TryRedo(out UndoState state) : _undo.TryUndo(out state))
+        {
+            ApplyUndoState(state);
+        }
+
+        return true;
+    }
+
+    private void ApplyUndoState(UndoState state)
+    {
+        _skipUndoRecord = true;     // this frame's change is the undo itself, not a new edit
+        _completion.Hide();
+
+        // Not browsing history and holding no draft any more: the text is whatever the undo says.
+        _history.ResetCursor();
+        _draft = string.Empty;
+
+        SetInputSelection(state.Text, state.Anchor, state.Focus);
     }
 
     // ── History vs. caret movement ────────────────────────────────────────────

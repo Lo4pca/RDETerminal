@@ -258,6 +258,28 @@ internal static class TerminalInputEditing
         return true;
     }
 
+    /// <summary>
+    /// Classifies a change for the undo history: one typed character, one deleted
+    /// character (Backspace or Delete), or anything else (paste, completion,
+    /// indent, a replaced selection, ...). <paramref name="typed"/> is the typed
+    /// character for <see cref="EditKind.Typing"/>.
+    /// </summary>
+    internal static EditKind ClassifyEdit(string before, int beforeCaret, string after, int afterCaret, out char typed)
+    {
+        if (TryGetInsertedChar(before, beforeCaret, after, afterCaret, out typed))
+        {
+            return EditKind.Typing;
+        }
+
+        if (IsSingleCharDeletedBeforeCaret(before, beforeCaret, after, afterCaret)
+            || IsSingleCharDeletedAfterCaret(before, beforeCaret, after, afterCaret))
+        {
+            return EditKind.Deleting;
+        }
+
+        return EditKind.Other;
+    }
+
     // ── Bracket matching ──────────────────────────────────────────────────────
 
     /// <summary>
@@ -564,7 +586,7 @@ internal static class TerminalInputEditing
         }
 
         int columnBefore = afterCaret - lineStart + 1;
-        int target = (columnBefore - 1) / IndentUnit.Length * IndentUnit.Length;
+        int target = ((columnBefore - 1) / IndentUnit.Length) * IndentUnit.Length;
         int extra = columnBefore - target - 1;      // spaces still to delete beyond the one already gone
         if (extra <= 0)
         {
@@ -769,6 +791,17 @@ internal static class TerminalInputEditing
                && afterCaret == beforeCaret - 1
                && string.CompareOrdinal(before, 0, after, 0, afterCaret) == 0
                && string.CompareOrdinal(before, beforeCaret, after, afterCaret, before.Length - beforeCaret) == 0;
+    }
+
+    /// <summary>True when exactly one character was removed, immediately after the caret (Delete key).</summary>
+    private static bool IsSingleCharDeletedAfterCaret(string before, int beforeCaret, string after, int afterCaret)
+    {
+        return before != null && after != null
+               && after.Length == before.Length - 1
+               && beforeCaret >= 0 && beforeCaret < before.Length
+               && afterCaret == beforeCaret
+               && string.CompareOrdinal(before, 0, after, 0, beforeCaret) == 0
+               && string.CompareOrdinal(before, beforeCaret + 1, after, afterCaret, before.Length - beforeCaret - 1) == 0;
     }
 
     /// <summary>How many leading characters Shift+Tab removes from a line: one tab, or up to one indent of spaces.</summary>
